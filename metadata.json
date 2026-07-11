@@ -1,0 +1,6 @@
+{
+  "name": "Noor Al-Quran",
+  "description": "Premium Islamic application featuring the Holy Quran, Prayer Times, Qibla, Azkar, Tafsir, Reciters, Memorization Quiz, and an AI Islamic Assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
