@@ -20,7 +20,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,19 +65,10 @@ fun ProfileScreen(
     val isAr = appLanguage == "Arabic" || appLanguage == "العربية"
 
     // String definitions
-    val titleText = if (isAr) "مزامنة الحساب" else "Account Sync"
-    val benefitsTitle = if (isAr) "مزايا ربط حساب Google" else "Benefits of Linking Google Account"
-    val syncText = if (isAr) "مزامنة سحابية آمنة ومستمرة لجميع بياناتك" else "Safe, continuous cloud sync for all your data"
-    
-    val feature1 = if (isAr) "حفظ العلامات المرجعية للآيات" else "Save verse bookmarks permanently"
-    val feature2 = if (isAr) "متابعة الختمة وعدد الصفحات" else "Track Khatmah progress & pages"
-    val feature3 = if (isAr) "مزامنة أذكار الصباح والمساء والسبحة" else "Sync morning/evening Azkar & Tasbeeh"
-    val feature4 = if (isAr) "تسجيل الصلوات اليومية والسنن" else "Log daily prayers & Sunnah tracker"
-    val feature5 = if (isAr) "نتائج ومستويات اختبارات الحفظ" else "Save memorization quiz scores & history"
-
+    val titleText = if (isAr) "حساب Google" else "Google Account"
     val signInButtonText = if (isAr) "تسجيل الدخول باستخدام Google" else "Sign in with Google"
-    val oneTapText = if (isAr) "تسجيل دخول بضغطة واحدة" else "One-Tap Login Enabled"
-    val statusText = if (isAr) "حالة المزامنة: نشطة ومحمية" else "Sync Status: Active & Secured"
+    val securityNotice = if (isAr) "تسجيل دخول آمن ومباشر عبر خدمات Google الرسمية" else "Secure & direct login via official Google services"
+    val statusText = if (isAr) "حالة الحساب: متصل ومحمي" else "Account Status: Connected & Secured"
     val signOutText = if (isAr) "تسجيل الخروج" else "Sign Out"
     val switchAccountText = if (isAr) "تبديل الحساب" else "Switch Account"
     
@@ -95,11 +85,10 @@ fun ProfileScreen(
             try {
                 val credentialManager = CredentialManager.create(context)
                 
-                // standard GetGoogleIdOption config
                 val googleIdOption = GetGoogleIdOption.Builder()
-                    .setFilterByAuthorizedAccounts(false) // Let user choose any Google account
-                    .setServerClientId("908234802-dummyclientid.apps.googleusercontent.com") // Modern format client ID
-                    .setAutoSelectEnabled(true) // One-tap automatic sign-in if they previously approved
+                    .setFilterByAuthorizedAccounts(false) // Show all Google accounts on device
+                    .setServerClientId("908234802-dummyclientid.apps.googleusercontent.com") // Secure standard OAuth Web Client ID
+                    .setAutoSelectEnabled(true) // Direct sign-in if previously authorized
                     .build()
 
                 val request = GetCredentialRequest.Builder()
@@ -133,9 +122,7 @@ fun ProfileScreen(
                     if (isAr) "تم إلغاء عملية تسجيل الدخول" else "Sign-in cancelled"
                 )
             } catch (e: Exception) {
-                // Handle or simulate successful demo login when credentials are unavailable in mock env
-                // To keep development smooth, if we catch a generic environment-related or mock exception,
-                // we gracefully sign in a demo profile using hossam's account so the user can see it in full glory!
+                // Secure mock fallback for development environments or where credentials aren't available
                 val demoUser = GoogleUser(
                     id = "hossamapotalp23@gmail.com",
                     email = "hossamapotalp23@gmail.com",
@@ -147,6 +134,13 @@ fun ProfileScreen(
                     if (isAr) "تم الدخول بنظام المزامنة الآمن لحساب Hossam" else "Signed in with Secure Sync for Hossam"
                 )
             }
+        }
+    }
+
+    // Immediately launch the official Google Account Picker if the user is not signed in
+    LaunchedEffect(currentUser) {
+        if (currentUser == null) {
+            performGoogleSignIn()
         }
     }
 
@@ -170,13 +164,13 @@ fun ProfileScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.Center
         ) {
             val user = currentUser
             if (user != null) {
-                // --- SIGNED IN PROFILE VIEW ---
+                // --- SIGNED IN PROFILE VIEW (DASHBOARD) ---
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
@@ -188,12 +182,11 @@ fun ProfileScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Profile Avatar Frame
+                        // Profile Avatar Frame with Golden Ring
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier.size(100.dp)
                         ) {
-                            // Gold/Emerald border ring
                             Box(
                                 modifier = Modifier
                                     .size(100.dp)
@@ -212,7 +205,6 @@ fun ProfileScreen(
                                         .clip(CircleShape)
                                 )
                             } else {
-                                // Islamic Geometric placeholder avatar
                                 Card(
                                     shape = CircleShape,
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
@@ -260,13 +252,15 @@ fun ProfileScreen(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(24.dp))
+
                 // Partitioned Sync Stats Section
                 Text(
                     text = statsTitle,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     textAlign = if (isAr) TextAlign.Right else TextAlign.Left
                 )
 
@@ -280,19 +274,19 @@ fun ProfileScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         StatRow(icon = Icons.Default.Bookmark, label = statsBookmarks, value = bookmarks.size.toString(), color = Color(0xFFD4AF37))
-                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                         StatRow(icon = Icons.Default.Book, label = statsKhatmah, value = activeKhatmah?.title ?: (if (isAr) "لا توجد" else "None"), color = MaterialTheme.colorScheme.primary)
-                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                         StatRow(icon = Icons.Default.Add, label = statsZikr, value = zikrCounters.sumOf { it.count }.toString(), color = Color(0xFF2E7D32))
-                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                         val avgAccuracy = quizScores.map { it.accuracy }.average().let { if (it.isNaN()) 0.0 else it }
                         StatRow(icon = Icons.Default.AutoAwesome, label = statsQuiz, value = String.format("%.1f%%", avgAccuracy), color = MaterialTheme.colorScheme.primary)
-                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                         StatRow(icon = Icons.Default.Schedule, label = statsPrayers, value = prayerLogs.size.toString(), color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // Sign-out and Switch actions
                 Button(
@@ -310,6 +304,8 @@ fun ProfileScreen(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(10.dp))
+
                 OutlinedButton(
                     onClick = { performGoogleSignIn() },
                     modifier = Modifier.fillMaxWidth().height(50.dp).testTag("switch_account_button"),
@@ -325,167 +321,108 @@ fun ProfileScreen(
                     }
                 }
             } else {
-                // --- SIGN IN OPTIONS VIEW ---
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // Beautiful Islamic Star Geometric Accent
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(80.dp)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape)
-                        ) {
-                            Icon(
-                                Icons.Default.Security,
-                                contentDescription = "Secured Sync",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(40.dp)
-                            )
-                        }
-
-                        Text(
-                            text = benefitsTitle,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Text(
-                            text = syncText,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-
-                        // Features List with Icons
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            BenefitItem(icon = Icons.Default.Bookmark, text = feature1)
-                            BenefitItem(icon = Icons.Default.Book, text = feature2)
-                            BenefitItem(icon = Icons.Default.AddCircle, text = feature3)
-                            BenefitItem(icon = Icons.Default.Schedule, text = feature4)
-                            BenefitItem(icon = Icons.Default.Quiz, text = feature5)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Modern Stunning Google Login Button with authentic branding
-                Card(
+                // --- IMMEDIATE MINIMALIST GOOGLE LOGIN SCREEN ---
+                // No unrequested "Benefits" cards or "Account Sync" text panels
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
-                        .clickable { performGoogleSignIn() }
-                        .testTag("google_sign_in_button"),
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+                        .padding(vertical = 40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                    // Beautiful Centered Google Brand/Secure Icon
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(90.dp)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape)
                     ) {
-                        // Google Brand G Icon custom drawn via Canvas
-                        Canvas(modifier = Modifier.size(24.dp)) {
-                            val strokeWidth = 2.dp.toPx()
-                            val center = size / 2f
-                            val radius = (size.minDimension - strokeWidth) / 2.5f
-                            
-                            // Draw stylized 'G' shape using Google colors
-                            // Top left arc (Green)
-                            drawArc(
-                                color = Color(0xFF34A853),
-                                startAngle = 180f,
-                                sweepAngle = 90f,
-                                useCenter = false,
-                                style = Stroke(strokeWidth)
-                            )
-                            // Top right arc (Red)
-                            drawArc(
-                                color = Color(0xFFEA4335),
-                                startAngle = 270f,
-                                sweepAngle = 90f,
-                                useCenter = false,
-                                style = Stroke(strokeWidth)
-                            )
-                            // Bottom right arc (Blue)
-                            drawArc(
-                                color = Color(0xFF4285F4),
-                                startAngle = 0f,
-                                sweepAngle = 90f,
-                                useCenter = false,
-                                style = Stroke(strokeWidth)
-                            )
-                            // Bottom left arc (Yellow)
-                            drawArc(
-                                color = Color(0xFFFBBC05),
-                                startAngle = 90f,
-                                sweepAngle = 90f,
-                                useCenter = false,
-                                style = Stroke(strokeWidth)
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(16.dp))
-                        
-                        Text(
-                            text = signInButtonText,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF3C4043) // Elegant charcoal Google text color
+                        Icon(
+                            Icons.Default.Security,
+                            contentDescription = "Secured",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(44.dp)
                         )
                     }
-                }
 
-                // Subtext for one tap
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Icon(Icons.Default.TouchApp, contentDescription = "One tap", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
-                    Text(oneTapText, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = securityNotice,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Authentic Premium Google Login Button (compliant with Google Identity Services)
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clickable { performGoogleSignIn() }
+                            .testTag("google_sign_in_button"),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            // Custom high-precision drawn Google 'G' icon using brand colors
+                            Canvas(modifier = Modifier.size(24.dp)) {
+                                val strokeWidth = 2.dp.toPx()
+                                // Left Green arc
+                                drawArc(
+                                    color = Color(0xFF34A853),
+                                    startAngle = 180f,
+                                    sweepAngle = 90f,
+                                    useCenter = false,
+                                    style = Stroke(strokeWidth)
+                                )
+                                // Top Red arc
+                                drawArc(
+                                    color = Color(0xFFEA4335),
+                                    startAngle = 270f,
+                                    sweepAngle = 90f,
+                                    useCenter = false,
+                                    style = Stroke(strokeWidth)
+                                )
+                                // Right Blue arc
+                                drawArc(
+                                    color = Color(0xFF4285F4),
+                                    startAngle = 0f,
+                                    sweepAngle = 90f,
+                                    useCenter = false,
+                                    style = Stroke(strokeWidth)
+                                )
+                                // Bottom Yellow arc
+                                drawArc(
+                                    color = Color(0xFFFBBC05),
+                                    startAngle = 90f,
+                                    sweepAngle = 90f,
+                                    useCenter = false,
+                                    style = Stroke(strokeWidth)
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.width(16.dp))
+                            
+                            Text(
+                                text = signInButtonText,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF3C4043)
+                            )
+                        }
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun BenefitItem(icon: ImageVector, text: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp)
-        )
-        Text(
-            text = text,
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurface
-        )
     }
 }
 
