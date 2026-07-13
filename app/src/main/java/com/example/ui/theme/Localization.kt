@@ -100,7 +100,15 @@ object Localization {
         "reciter_shuraim" to "Saud Al-Shuraim",
         "reciter_sudais" to "Abdul Rahman Al-Sudais",
         "reciter_yasser_al_dosari" to "Yasser Al-Dosari",
-        "reciter_islam_sobhi" to "Islam Sobhi"
+        "reciter_islam_sobhi" to "Islam Sobhi",
+        "daylight_saving_time" to "Daylight Saving Time (+1h)",
+        "prayer_approaching_alert" to "Prayer Approaching Alert (15m)",
+        "tasbeeh_sound" to "Tasbih Click Sound",
+        "tasbeeh_vibration" to "Tasbih Vibration",
+        "download" to "Download",
+        "downloaded" to "Downloaded",
+        "downloading" to "Downloading",
+        "delete_audio" to "Delete Offline Audio"
     )
 
     private val arabicTranslations = mapOf(
@@ -193,6 +201,14 @@ object Localization {
         "reciter_shuraim" to "سعود الشريم",
         "reciter_sudais" to "عبد الرحمن السديس",
         "reciter_yasser_al_dosari" to "ياسر الدوسري",
-        "reciter_islam_sobhi" to "إسلام صبحي"
+        "reciter_islam_sobhi" to "إسلام صبحي",
+        "daylight_saving_time" to "التوقيت الصيفي (+١ ساعة)",
+        "prayer_approaching_alert" to "تنبيه اقتراب الصلاة (قبلها بـ ١٥ د)",
+        "tasbeeh_sound" to "صوت كليك التسبيح",
+        "tasbeeh_vibration" to "اهتزاز السبحة",
+        "download" to "تحميل",
+        "downloaded" to "تم التحميل",
+        "downloading" to "جاري التحميل",
+        "delete_audio" to "حذف الصوت المحمل"
     )
 }

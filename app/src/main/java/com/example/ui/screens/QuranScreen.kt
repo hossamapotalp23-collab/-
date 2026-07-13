@@ -125,7 +125,8 @@ fun QuranScreen(
                     "Surahs" -> {
                         val filteredSurahs = QuranDataset.allSurahHeaders.filter {
                             it.name.contains(searchQueries, ignoreCase = true) ||
-                                    it.translation.contains(searchQueries, ignoreCase = true)
+                                    it.translation.contains(searchQueries, ignoreCase = true) ||
+                                    it.arabicName.contains(searchQueries, ignoreCase = true)
                         }
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
@@ -291,6 +292,7 @@ fun SurahReaderView(
     val isPlayingAudio by viewModel.isPlayingAudio.collectAsStateWithLifecycle()
     val currentPlayingAyah by viewModel.currentPlayingAyah.collectAsStateWithLifecycle()
     val selectedReciter by viewModel.selectedReciter.collectAsStateWithLifecycle()
+    val isLoadingRealSurah by viewModel.isLoadingRealSurah.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     var showReciterDialog by remember { mutableStateOf(false) }
@@ -406,6 +408,16 @@ fun SurahReaderView(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
+                if (isLoadingRealSurah) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter),
+                        color = Color(0xFFD4AF37),
+                        trackColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                }
+
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),

@@ -79,11 +79,11 @@ object PrayerCalculator {
     )
 
     val adhanMuezzins = listOf(
-        AdhanMuezzin("makkah", "علي أحمد ملا (أذان مكة)", "Ali Ahmad Mulla (Makkah)", "http://www.islamcan.com/audio/adhan/azan1.mp3"),
-        AdhanMuezzin("abdul_basit", "عبد الباسط عبد الصمد", "Abdul Basit Abdus Samad", "http://www.islamcan.com/audio/adhan/azan2.mp3"),
-        AdhanMuezzin("alafasy", "مشاري راشد العفاسي", "Mishary Rashid Alafasy", "http://www.islamcan.com/audio/adhan/azan20.mp3"),
-        AdhanMuezzin("madinah", "أذان المدينة المنورة", "Madinah Adhan", "http://www.islamcan.com/audio/adhan/azan16.mp3"),
-        AdhanMuezzin("luhaidan", "محمد اللحيدان", "Muhammad Al-Luhaidan", "http://www.islamcan.com/audio/adhan/azan10.mp3")
+        AdhanMuezzin("makkah", "علي أحمد ملا (أذان مكة)", "Ali Ahmad Mulla (Makkah)", "https://www.islamcan.com/audio/adhan/azan1.mp3"),
+        AdhanMuezzin("abdul_basit", "عبد الباسط عبد الصمد", "Abdul Basit Abdus Samad", "https://www.islamcan.com/audio/adhan/azan2.mp3"),
+        AdhanMuezzin("alafasy", "مشاري راشد العفاسي", "Mishary Rashid Alafasy", "https://www.islamcan.com/audio/adhan/azan20.mp3"),
+        AdhanMuezzin("madinah", "أذان المدينة المنورة", "Madinah Adhan", "https://www.islamcan.com/audio/adhan/azan16.mp3"),
+        AdhanMuezzin("luhaidan", "محمد اللحيدان", "Muhammad Al-Luhaidan", "https://www.islamcan.com/audio/adhan/azan10.mp3")
     )
 
     enum class CalculationMethod(val description: String) {

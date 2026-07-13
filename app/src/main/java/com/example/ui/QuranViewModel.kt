@@ -10,6 +10,8 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.api.GeminiService
+import com.example.data.api.QuranApiService
+import com.example.data.api.PrayerApiService
 import com.example.data.database.*
 import com.example.data.prayer.PrayerCalculator
 import com.example.data.quran.*
@@ -19,6 +21,10 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 class QuranViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
@@ -40,21 +46,50 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     private var hasGravity = false
     private var hasGeomagnetic = false
 
+    // --- Google Authentication States & Setup ---
+    private val _currentUser = MutableStateFlow<GoogleUser?>(null)
+    val currentUser = _currentUser.asStateFlow()
+
+    fun loginUser(user: GoogleUser) {
+        _currentUser.value = user
+        prefs.edit()
+            .putString("user_google_id", user.id)
+            .putString("user_email", user.email)
+            .putString("user_display_name", user.displayName)
+            .putString("user_photo_url", user.photoUrl)
+            .apply()
+    }
+
+    fun logoutUser() {
+        _currentUser.value = null
+        prefs.edit()
+            .remove("user_google_id")
+            .remove("user_email")
+            .remove("user_display_name")
+            .remove("user_photo_url")
+            .apply()
+    }
+
     // --- State flows for reactive updates ---
-    val bookmarks: StateFlow<List<BookmarkEntity>> = bookmarkDao.getAllBookmarks()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val bookmarks: StateFlow<List<BookmarkEntity>> = combine(bookmarkDao.getAllBookmarks(), currentUser) { list, user ->
+        list.filter { it.userId == user?.id }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val activeKhatmah: StateFlow<KhatmahPlanEntity?> = khatmahDao.getActivePlan()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val activeKhatmah: StateFlow<KhatmahPlanEntity?> = combine(khatmahDao.getActivePlan(), currentUser) { plan, user ->
+        if (plan?.userId == user?.id) plan else null
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val zikrCounters: StateFlow<List<ZikrCounterEntity>> = zikrDao.getAllCounters()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val zikrCounters: StateFlow<List<ZikrCounterEntity>> = combine(zikrDao.getAllCounters(), currentUser) { list, user ->
+        list.filter { it.userId == (user?.id ?: "") }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val quizScores: StateFlow<List<MemorizationScoreEntity>> = memorizationDao.getAllScores()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val quizScores: StateFlow<List<MemorizationScoreEntity>> = combine(memorizationDao.getAllScores(), currentUser) { list, user ->
+        list.filter { it.userId == user?.id }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val prayerLogs: StateFlow<List<PrayerLogEntity>> = prayerDao.getRecentLogs()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val prayerLogs: StateFlow<List<PrayerLogEntity>> = combine(prayerDao.getRecentLogs(), currentUser) { list, user ->
+        list.filter { it.userId == (user?.id ?: "") }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- Live System States ---
     private val prefs = application.getSharedPreferences("noor_quran_prefs", Context.MODE_PRIVATE)
@@ -83,6 +118,19 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     private val _nextPrayerCountdown = MutableStateFlow("")
     val nextPrayerCountdown = _nextPrayerCountdown.asStateFlow()
 
+    private val _isUsingLiveApi = MutableStateFlow(false)
+    val isUsingLiveApi = _isUsingLiveApi.asStateFlow()
+
+    private val _hijriDateString = MutableStateFlow(PrayerCalculator.getHijriDate())
+    val hijriDateString = _hijriDateString.asStateFlow()
+
+    private var apiPrayerTimes: PrayerCalculator.PrayerTimes? = null
+    private var apiLat: Double? = null
+    private var apiLng: Double? = null
+    private var apiMethod: PrayerCalculator.CalculationMethod? = null
+    private var apiDateStr: String? = null
+    private var isFetchingLiveTimes = false
+
     // --- Adhan & Notification States ---
     private val _selectedAdhanMuezzin = MutableStateFlow(
         PrayerCalculator.adhanMuezzins.firstOrNull { it.id == prefs.getString("selected_adhan_muezzin_id", "makkah") }
@@ -96,6 +144,30 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     private val _isAdhanNotificationEnabled = MutableStateFlow(prefs.getBoolean("is_adhan_notification_enabled", true))
     val isAdhanNotificationEnabled = _isAdhanNotificationEnabled.asStateFlow()
 
+    // --- DST & Feedback Preferences ---
+    private val _isDSTEnabled = MutableStateFlow(prefs.getBoolean("is_dst_enabled", false))
+    val isDSTEnabled = _isDSTEnabled.asStateFlow()
+
+    private val _isPrayerApproachingAlertEnabled = MutableStateFlow(prefs.getBoolean("is_prayer_approaching_alert_enabled", true))
+    val isPrayerApproachingAlertEnabled = _isPrayerApproachingAlertEnabled.asStateFlow()
+
+    private val _isTasbeehSoundEnabled = MutableStateFlow(prefs.getBoolean("is_tasbeeh_sound_enabled", true))
+    val isTasbeehSoundEnabled = _isTasbeehSoundEnabled.asStateFlow()
+
+    private val _isTasbeehVibrationEnabled = MutableStateFlow(prefs.getBoolean("is_tasbeeh_vibration_enabled", true))
+    val isTasbeehVibrationEnabled = _isTasbeehVibrationEnabled.asStateFlow()
+
+    // --- Audio Downloading States ---
+    sealed class DownloadState {
+        object Idle : DownloadState()
+        data class Progress(val progress: Float) : DownloadState()
+        object Completed : DownloadState()
+        data class Error(val message: String) : DownloadState()
+    }
+
+    private val _downloadStates = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
+    val downloadStates = _downloadStates.asStateFlow()
+
     private val _isPlayingAdhan = MutableStateFlow(false)
     val isPlayingAdhan = _isPlayingAdhan.asStateFlow()
 
@@ -108,6 +180,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
 
     private val _selectedSurah = MutableStateFlow<Surah?>(null)
     val selectedSurah = _selectedSurah.asStateFlow()
+
+    private val _isLoadingRealSurah = MutableStateFlow(false)
+    val isLoadingRealSurah = _isLoadingRealSurah.asStateFlow()
 
     private val _quranSearchQuery = MutableStateFlow("")
     val quranSearchQuery = _quranSearchQuery.asStateFlow()
@@ -189,14 +264,47 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     )
 
     init {
+        // Load persistent Google Sign-In state on launch
+        val savedGoogleId = prefs.getString("user_google_id", null)
+        if (savedGoogleId != null) {
+            _currentUser.value = GoogleUser(
+                id = savedGoogleId,
+                email = prefs.getString("user_email", "") ?: "",
+                displayName = prefs.getString("user_display_name", null),
+                photoUrl = prefs.getString("user_photo_url", null)
+            )
+        }
+
         // Load default Surah
         loadSurahContent(1)
 
+        // Scan downloaded audio files
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = application.applicationContext
+            val downloadDir = File(context.filesDir, "audio_downloads")
+            val initialMap = mutableMapOf<String, DownloadState>()
+            if (downloadDir.exists() && downloadDir.isDirectory) {
+                downloadDir.listFiles()?.forEach { file ->
+                    if (file.name.endsWith(".mp3")) {
+                        val nameWithoutExt = file.name.substringBeforeLast(".")
+                        val parts = nameWithoutExt.split("_")
+                        if (parts.size == 2) {
+                            val reciterId = parts[0]
+                            val surahId = parts[1].toIntOrNull() ?: 0
+                            initialMap["${reciterId}_$surahId"] = DownloadState.Completed
+                        }
+                    }
+                }
+            }
+            _downloadStates.value = initialMap
+        }
+
         // Initialize Sensor Manager for Qibla Compass
+        val baseSensorContext = application.applicationContext
         val sensorContext = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            application.applicationContext.createAttributionContext("qibla")
+            baseSensorContext.createAttributionContext("qibla")
         } else {
-            application.applicationContext
+            baseSensorContext
         }
         sensorManager = sensorContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         if (sensorManager != null) {
@@ -251,7 +359,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                             targetDays = 30,
                             pagesRead = 120,
                             totalPages = 604,
-                            dailyMinutes = 20
+                            dailyMinutes = 20,
+                            userId = currentUser.value?.id
                         )
                     )
                 }
@@ -268,7 +377,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                                 zikrId = zikr.id,
                                 count = 0,
                                 maxCount = zikr.repeatCount,
-                                isFavorite = false
+                                isFavorite = false,
+                                userId = currentUser.value?.id ?: ""
                             )
                         )
                     }
@@ -338,7 +448,25 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     fun loadSurahContent(surahId: Int) {
         viewModelScope.launch {
             _selectedSurahId.value = surahId
-            _selectedSurah.value = QuranDataset.getSurahContent(surahId)
+            // Load local backup instantly for responsiveness
+            val localSurah = QuranDataset.getSurahContent(surahId)
+            _selectedSurah.value = localSurah
+
+            // If it's not one of the pre-compiled local surahs, fetch the real, authentic text
+            val specialSurahIds = listOf(1, 108, 112, 113, 114)
+            if (surahId !in specialSurahIds) {
+                _isLoadingRealSurah.value = true
+                try {
+                    val realSurah = QuranApiService.fetchSurah(surahId)
+                    if (realSurah != null && realSurah.verses.isNotEmpty()) {
+                        _selectedSurah.value = realSurah
+                    }
+                } catch (e: Exception) {
+                    Log.e("QuranViewModel", "Error fetching authentic surah $surahId", e)
+                } finally {
+                    _isLoadingRealSurah.value = false
+                }
+            }
         }
     }
 
@@ -357,12 +485,18 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     // Bookmarks
     fun toggleBookmark(surahId: Int, ayahId: Int) {
         viewModelScope.launch {
-            val isBookmarked = bookmarks.value.any { it.surahNumber == surahId && it.ayahNumber == ayahId }
-            if (isBookmarked) {
-                bookmarkDao.deleteBookmark(surahId, ayahId)
+            val bookmark = bookmarks.value.firstOrNull { it.surahNumber == surahId && it.ayahNumber == ayahId }
+            if (bookmark != null) {
+                bookmarkDao.deleteBookmarkEntity(bookmark)
             } else {
                 val surahHeader = QuranDataset.allSurahHeaders.firstOrNull { it.id == surahId }
-                val surahContent = QuranDataset.getSurahContent(surahId)
+                // Use currently loaded authentic surah if it matches the requested ID, otherwise use backup
+                val currentSurah = _selectedSurah.value
+                val surahContent = if (currentSurah != null && currentSurah.header.id == surahId) {
+                    currentSurah
+                } else {
+                    QuranDataset.getSurahContent(surahId)
+                }
                 val ayah = surahContent.verses.firstOrNull { it.number == ayahId }
                 if (ayah != null && surahHeader != null) {
                     bookmarkDao.insertBookmark(
@@ -371,7 +505,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                             ayahNumber = ayahId,
                             surahName = surahHeader.name,
                             arabicText = ayah.textArabic,
-                            translationText = ayah.textTranslation
+                            translationText = ayah.textTranslation,
+                            userId = currentUser.value?.id
                         )
                     )
                 }
@@ -396,7 +531,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         val surahId = _selectedSurahId.value
         val formattedSurahId = String.format("%03d", surahId)
         val reciter = _selectedReciter.value
-        val audioUrl = "${reciter.audioBaseUrl}$formattedSurahId.mp3"
+        
+        val context = getApplication<Application>().applicationContext
+        val localFile = File(File(context.filesDir, "audio_downloads"), "${reciter.id}_${formattedSurahId}.mp3")
+        val audioUrl = if (localFile.exists()) {
+            localFile.absolutePath
+        } else {
+            "${reciter.audioBaseUrl}$formattedSurahId.mp3"
+        }
 
         if (ayah != null) {
             _currentPlayingAyah.value = ayah
@@ -448,7 +590,12 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                 }
 
                 mediaPlayer?.apply {
-                    setDataSource(context, android.net.Uri.parse(url))
+                    val uri = if (url.startsWith("/")) {
+                        android.net.Uri.fromFile(java.io.File(url))
+                    } else {
+                        android.net.Uri.parse(url)
+                    }
+                    setDataSource(context, uri)
                     prepareAsync()
                     setOnPreparedListener { mp ->
                         mp.start()
@@ -633,6 +780,35 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         recalculatePrayerTimes(Calendar.getInstance())
     }
 
+    private fun addOneHourToTime(timeStr: String): String {
+        try {
+            val parts = timeStr.split(":")
+            if (parts.size == 2) {
+                val hours = (parts[0].toInt() + 1) % 24
+                return String.format("%02d:%s", hours, parts[1])
+            }
+        } catch (e: Exception) {
+            Log.e("QuranViewModel", "Error adjusting DST: ${e.message}")
+        }
+        return timeStr
+    }
+
+    private fun adjustTimesForDST(times: PrayerCalculator.PrayerTimes): PrayerCalculator.PrayerTimes {
+        if (!_isDSTEnabled.value) return times
+        return PrayerCalculator.PrayerTimes(
+            fajr = addOneHourToTime(times.fajr),
+            sunrise = addOneHourToTime(times.sunrise),
+            dhuhr = addOneHourToTime(times.dhuhr),
+            asr = addOneHourToTime(times.asr),
+            maghrib = addOneHourToTime(times.maghrib),
+            isha = addOneHourToTime(times.isha)
+        )
+    }
+
+    private fun setAdjustedPrayerTimes(times: PrayerCalculator.PrayerTimes?) {
+        _prayerTimes.value = times?.let { adjustTimesForDST(it) }
+    }
+
     private fun recalculatePrayerTimes(cal: Calendar) {
         val lat = _currentLatitude.value
         val lng = _currentLongitude.value
@@ -647,8 +823,57 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
             cal.timeZone = TimeZone.getTimeZone(preset.timezoneId)
         }
 
-        val times = PrayerCalculator.calculatePrayerTimes(lat, lng, cal, method)
-        _prayerTimes.value = times
+        val dateStr = SimpleDateFormat("dd-MM-yyyy", Locale.US).format(cal.time)
+        val isCacheValid = apiPrayerTimes != null &&
+                apiLat == lat &&
+                apiLng == lng &&
+                apiMethod == method &&
+                apiDateStr == dateStr
+
+        if (isCacheValid) {
+            _isUsingLiveApi.value = true
+            setAdjustedPrayerTimes(apiPrayerTimes)
+        } else {
+            // Use local calculation as initial/fallback
+            _isUsingLiveApi.value = false
+            val localTimes = PrayerCalculator.calculatePrayerTimes(lat, lng, cal, method)
+            setAdjustedPrayerTimes(localTimes)
+            _hijriDateString.value = PrayerCalculator.getHijriDate()
+
+            if (!isFetchingLiveTimes) {
+                isFetchingLiveTimes = true
+                viewModelScope.launch {
+                    try {
+                        val methodId = when (method) {
+                            PrayerCalculator.CalculationMethod.KARACHI -> 1
+                            PrayerCalculator.CalculationMethod.ISNA -> 2
+                            PrayerCalculator.CalculationMethod.MUSLIM_WORLD_LEAGUE -> 3
+                            PrayerCalculator.CalculationMethod.UMM_AL_QURA -> 4
+                            PrayerCalculator.CalculationMethod.EGYPT -> 5
+                        }
+                        val response = PrayerApiService.fetchPrayerTimes(lat, lng, methodId, dateStr)
+                        if (response != null) {
+                            apiPrayerTimes = response.times
+                            apiLat = lat
+                            apiLng = lng
+                            apiMethod = method
+                            apiDateStr = dateStr
+                            setAdjustedPrayerTimes(response.times)
+                            _isUsingLiveApi.value = true
+                            if (response.hijriDate.isNotEmpty()) {
+                                _hijriDateString.value = response.hijriDate
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("QuranViewModel", "Error fetching live prayer times: ${e.message}")
+                    } finally {
+                        isFetchingLiveTimes = false
+                    }
+                }
+            }
+        }
+
+        val times = _prayerTimes.value ?: adjustTimesForDST(PrayerCalculator.calculatePrayerTimes(lat, lng, cal, method))
 
         // Highlight next prayer and calculate countdown
         val nowH = cal.get(Calendar.HOUR_OF_DAY)
@@ -692,7 +917,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     fun togglePrayerLogged(prayerName: String) {
         viewModelScope.launch {
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-            val existing = prayerLogs.value.firstOrNull { it.dateStr == todayStr } ?: PrayerLogEntity(todayStr)
+            val existing = prayerLogs.value.firstOrNull { it.dateStr == todayStr } ?: PrayerLogEntity(dateStr = todayStr, userId = currentUser.value?.id ?: "")
 
             val updated = when (prayerName.lowercase()) {
                 "fajr" -> existing.copy(fajr = !existing.fajr)
@@ -711,26 +936,29 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     // Azkar Counters
     fun incrementZikr(id: String) {
         viewModelScope.launch {
-            val counter = zikrCounters.value.firstOrNull { it.zikrId == id } ?: ZikrCounterEntity(id)
+            val user = currentUser.value?.id ?: ""
+            val counter = zikrCounters.value.firstOrNull { it.zikrId == id } ?: ZikrCounterEntity(zikrId = id, userId = user)
             if (counter.count < counter.maxCount) {
-                zikrDao.updateCount(id, counter.count + 1)
+                zikrDao.updateCount(id, user, counter.count + 1)
             } else {
                 // Reset on complete
-                zikrDao.updateCount(id, 0)
+                zikrDao.updateCount(id, user, 0)
             }
         }
     }
 
     fun resetZikr(id: String) {
         viewModelScope.launch {
-            zikrDao.updateCount(id, 0)
+            val user = currentUser.value?.id ?: ""
+            zikrDao.updateCount(id, user, 0)
         }
     }
 
     fun toggleZikrFavorite(id: String) {
         viewModelScope.launch {
-            val counter = zikrCounters.value.firstOrNull { it.zikrId == id } ?: ZikrCounterEntity(id)
-            zikrDao.toggleFavorite(id, !counter.isFavorite)
+            val user = currentUser.value?.id ?: ""
+            val counter = zikrCounters.value.firstOrNull { it.zikrId == id } ?: ZikrCounterEntity(zikrId = id, userId = user)
+            zikrDao.toggleFavorite(id, user, !counter.isFavorite)
         }
     }
 
@@ -767,7 +995,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                     targetDays = days,
                     pagesRead = 0,
                     totalPages = 604,
-                    dailyMinutes = targetMinutes
+                    dailyMinutes = targetMinutes,
+                    userId = currentUser.value?.id
                 )
             )
         }
@@ -898,7 +1127,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                     quizType = question.type,
                     score = if (isCorrect) 1 else 0,
                     total = 1,
-                    accuracy = if (isCorrect) 100.0 else 0.0
+                    accuracy = if (isCorrect) 100.0 else 0.0,
+                    userId = currentUser.value?.id
                 )
             )
         }
@@ -942,15 +1172,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         _isPlayingAdhan.value = true
         viewModelScope.launch(Dispatchers.Main) {
             try {
-                val baseContext = getApplication<Application>().applicationContext
-                val context = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    baseContext.createAttributionContext("prayer_times")
-                } else {
-                    baseContext
-                }
-
                 adhanMediaPlayer = android.media.MediaPlayer().apply {
-                    setDataSource(context, android.net.Uri.parse(muezzin.audioUrl))
+                    setDataSource(muezzin.audioUrl)
                     setOnPreparedListener { mp ->
                         mp.start()
                     }
@@ -1006,7 +1229,117 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         prefs.edit().putBoolean("is_adhan_notification_enabled", newVal).apply()
     }
 
+    // --- New Settings & Custom Preferences Modifiers ---
+    fun toggleDST() {
+        val newVal = !_isDSTEnabled.value
+        _isDSTEnabled.value = newVal
+        prefs.edit().putBoolean("is_dst_enabled", newVal).apply()
+        recalculatePrayerTimes(Calendar.getInstance())
+    }
+
+    fun togglePrayerApproachingAlert() {
+        val newVal = !_isPrayerApproachingAlertEnabled.value
+        _isPrayerApproachingAlertEnabled.value = newVal
+        prefs.edit().putBoolean("is_prayer_approaching_alert_enabled", newVal).apply()
+    }
+
+    fun toggleTasbeehSound() {
+        val newVal = !_isTasbeehSoundEnabled.value
+        _isTasbeehSoundEnabled.value = newVal
+        prefs.edit().putBoolean("is_tasbeeh_sound_enabled", newVal).apply()
+    }
+
+    fun toggleTasbeehVibration() {
+        val newVal = !_isTasbeehVibrationEnabled.value
+        _isTasbeehVibrationEnabled.value = newVal
+        prefs.edit().putBoolean("is_tasbeeh_vibration_enabled", newVal).apply()
+    }
+
+    // --- Audio Downloading Engine ---
+    fun downloadSurahAudio(reciter: Reciter, surahId: Int) {
+        val key = "${reciter.id}_$surahId"
+        _downloadStates.value = _downloadStates.value + (key to DownloadState.Progress(0f))
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val formattedSurahId = String.format("%03d", surahId)
+                val urlString = "${reciter.audioBaseUrl}$formattedSurahId.mp3"
+                val url = URL(urlString)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.connect()
+                
+                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                    throw Exception("Server returned code ${connection.responseCode}")
+                }
+                
+                val fileLength = connection.contentLength
+                val context = getApplication<Application>().applicationContext
+                val downloadDir = File(context.filesDir, "audio_downloads")
+                if (!downloadDir.exists()) {
+                    downloadDir.mkdirs()
+                }
+                val tempFile = File(downloadDir, "${reciter.id}_${formattedSurahId}.tmp")
+                val targetFile = File(downloadDir, "${reciter.id}_${formattedSurahId}.mp3")
+                
+                connection.inputStream.use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        val data = ByteArray(4096)
+                        var total: Long = 0
+                        var count: Int
+                        while (input.read(data).also { count = it } != -1) {
+                            total += count
+                            if (fileLength > 0) {
+                                val progress = total.toFloat() / fileLength
+                                _downloadStates.value = _downloadStates.value + (key to DownloadState.Progress(progress))
+                            }
+                            output.write(data, 0, count)
+                        }
+                    }
+                }
+                
+                if (tempFile.renameTo(targetFile)) {
+                    _downloadStates.value = _downloadStates.value + (key to DownloadState.Completed)
+                } else {
+                    tempFile.copyTo(targetFile, overwrite = true)
+                    tempFile.delete()
+                    _downloadStates.value = _downloadStates.value + (key to DownloadState.Completed)
+                }
+            } catch (e: Exception) {
+                Log.e("QuranViewModel", "Error downloading surah: ${e.message}", e)
+                _downloadStates.value = _downloadStates.value + (key to DownloadState.Error(e.message ?: "Unknown error"))
+            }
+        }
+    }
+
+    fun deleteDownloadedSurah(reciter: Reciter, surahId: Int) {
+        val key = "${reciter.id}_$surahId"
+        viewModelScope.launch(Dispatchers.IO) {
+            val formattedSurahId = String.format("%03d", surahId)
+            val context = getApplication<Application>().applicationContext
+            val targetFile = File(File(context.filesDir, "audio_downloads"), "${reciter.id}_${formattedSurahId}.mp3")
+            if (targetFile.exists()) {
+                targetFile.delete()
+            }
+            _downloadStates.value = _downloadStates.value - key
+        }
+    }
+
     private var lastTriggeredAdhanKey = ""
+    private var lastTriggeredApproachKey = ""
+
+    private fun parseTimeToMinutes(timeStr: String): Int {
+        try {
+            val parts = timeStr.split(":")
+            if (parts.size == 2) {
+                return parts[0].toInt() * 60 + parts[1].toInt()
+            }
+        } catch (e: Exception) {
+            Log.e("QuranViewModel", "Error parsing time string: $timeStr")
+        }
+        return -1
+    }
 
     private fun checkAndTriggerAdhan(cal: Calendar) {
         val times = _prayerTimes.value ?: return
@@ -1016,7 +1349,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         
         val nowH = cal.get(Calendar.HOUR_OF_DAY)
         val nowM = cal.get(Calendar.MINUTE)
-        val currentTimeStr = String.format("%02d:%02d", nowH, nowM)
+        val currentTimeInMinutes = nowH * 60 + nowM
         
         val prayersToCheck = listOf(
             Pair("Fajr", times.fajr),
@@ -1029,8 +1362,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         for (prayer in prayersToCheck) {
             val prayerName = prayer.first
             val prayerTime = prayer.second
+            val prayerTimeInMinutes = parseTimeToMinutes(prayerTime)
+            if (prayerTimeInMinutes < 0) continue
             
-            if (currentTimeStr == prayerTime) {
+            // 1. Exact Prayer Time
+            if (currentTimeInMinutes == prayerTimeInMinutes) {
                 val triggerKey = "${prayerName}_${dateStr}_${prayerTime}"
                 if (lastTriggeredAdhanKey != triggerKey) {
                     lastTriggeredAdhanKey = triggerKey
@@ -1043,18 +1379,25 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                         playAdhan(_selectedAdhanMuezzin.value)
                     }
                 }
-                break
+            }
+            
+            // 2. Approaching Prayer Time (15 minutes before)
+            val diff = prayerTimeInMinutes - currentTimeInMinutes
+            if (diff == 15) {
+                val approachKey = "${prayerName}_${dateStr}_approach"
+                if (lastTriggeredApproachKey != approachKey) {
+                    lastTriggeredApproachKey = approachKey
+                    
+                    if (_isAdhanNotificationEnabled.value && _isPrayerApproachingAlertEnabled.value) {
+                        sendApproachingPrayerNotification(prayerName)
+                    }
+                }
             }
         }
     }
 
     private fun sendPrayerNotification(prayerName: String) {
-        val baseContext = getApplication<Application>().applicationContext
-        val context = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            baseContext.createAttributionContext("prayer_times")
-        } else {
-            baseContext
-        }
+        val context = getApplication<Application>().applicationContext
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         
         val channelId = "adhan_notifications"
@@ -1096,4 +1439,55 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
 
         notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
     }
+
+    private fun sendApproachingPrayerNotification(prayerName: String) {
+        val context = getApplication<Application>().applicationContext
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        
+        val channelId = "prayer_approach_notifications"
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                channelId,
+                "Prayer Approaching Alerts",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts warning you 15 minutes before the next prayer time"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val isAr = _appLanguage.value == "Arabic" || _appLanguage.value == "العربية"
+        val localizedPrayer = if (isAr) {
+            when (prayerName.lowercase()) {
+                "fajr" -> "الفجر"
+                "sunrise" -> "الشروق"
+                "dhuhr" -> "الظهر"
+                "asr" -> "العصر"
+                "maghrib" -> "المغرب"
+                "isha" -> "العشاء"
+                else -> prayerName
+            }
+        } else {
+            prayerName
+        }
+
+        val title = if (isAr) "اقتربت صلاة $localizedPrayer" else "$localizedPrayer prayer is approaching"
+        val text = if (isAr) "متبقي ١٥ دقيقة على رفع الأذان، تهيأ للصلاة." else "15 minutes remaining until the Adhan, prepare for prayer."
+
+        val builder = androidx.core.app.NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+
+        notificationManager.notify(System.currentTimeMillis().toInt() + 1000, builder.build())
+    }
 }
+
+data class GoogleUser(
+    val id: String,
+    val email: String,
+    val displayName: String?,
+    val photoUrl: String?
+)

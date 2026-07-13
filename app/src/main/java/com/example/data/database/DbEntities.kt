@@ -11,7 +11,8 @@ data class BookmarkEntity(
     val surahName: String,
     val arabicText: String,
     val translationText: String,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val userId: String? = null
 )
 
 @Entity(tableName = "khatmah_plans")
@@ -24,16 +25,18 @@ data class KhatmahPlanEntity(
     val pagesRead: Int = 0,
     val totalPages: Int = 604,
     val isCompleted: Boolean = false,
-    val dailyMinutes: Int = 15
+    val dailyMinutes: Int = 15,
+    val userId: String? = null
 )
 
-@Entity(tableName = "zikr_counters")
+@Entity(tableName = "zikr_counters", primaryKeys = ["zikrId", "userId"])
 data class ZikrCounterEntity(
-    @PrimaryKey val zikrId: String, // e.g. "morning_1", "evening_3"
+    val zikrId: String, // e.g. "morning_1", "evening_3"
     val count: Int = 0,
     val maxCount: Int = 33,
     val isFavorite: Boolean = false,
-    val lastUpdated: Long = System.currentTimeMillis()
+    val lastUpdated: Long = System.currentTimeMillis(),
+    val userId: String = ""
 )
 
 @Entity(tableName = "memorization_scores")
@@ -43,17 +46,19 @@ data class MemorizationScoreEntity(
     val quizType: String, // e.g., "Complete Verse", "Guess Surah"
     val score: Int,
     val total: Int,
-    val accuracy: Double
+    val accuracy: Double,
+    val userId: String? = null
 )
 
-@Entity(tableName = "prayer_logs")
+@Entity(tableName = "prayer_logs", primaryKeys = ["dateStr", "userId"])
 data class PrayerLogEntity(
-    @PrimaryKey val dateStr: String, // YYYY-MM-DD
+    val dateStr: String, // YYYY-MM-DD
     val fajr: Boolean = false,
     val sunrise: Boolean = false,
     val dhuhr: Boolean = false,
     val asr: Boolean = false,
     val maghrib: Boolean = false,
     val isha: Boolean = false,
-    val streakCount: Int = 0
+    val streakCount: Int = 0,
+    val userId: String = ""
 )

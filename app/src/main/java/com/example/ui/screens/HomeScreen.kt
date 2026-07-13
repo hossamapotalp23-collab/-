@@ -2,8 +2,10 @@ package com.example.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -27,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.example.data.prayer.PrayerCalculator
 import com.example.data.quran.QuranDataset
 import com.example.ui.QuranViewModel
@@ -47,6 +50,8 @@ fun HomeScreen(
     val nextPrayerCountdown by viewModel.nextPrayerCountdown.collectAsStateWithLifecycle()
     val city by viewModel.currentLocationName.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val hijriDateString by viewModel.hijriDateString.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var userName by remember { mutableStateOf("Hossam") }
     var isEditingName by remember { mutableStateOf(false) }
@@ -92,58 +97,101 @@ fun HomeScreen(
                             fontSize = 14.sp
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (isEditingName) {
-                                OutlinedTextField(
-                                    value = userName,
-                                    onValueChange = { userName = it },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        unfocusedTextColor = Color.White,
-                                        focusedTextColor = Color.White,
-                                        focusedBorderColor = goldSecondary,
-                                        unfocusedBorderColor = Color.White
-                                    ),
-                                    modifier = Modifier.width(150.dp),
-                                    singleLine = true
-                                )
-                                IconButton(onClick = { isEditingName = false }) {
-                                    Icon(Icons.Default.Check, contentDescription = Localization.translate("save", appLanguage), tint = goldSecondary)
-                                }
-                            } else {
+                            val user = currentUser
+                            if (user != null) {
                                 Text(
-                                    text = "$userName ✨",
+                                    text = "${user.displayName ?: user.email.substringBefore("@")} ✨",
                                     color = Color.White,
                                     fontSize = 24.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-                                IconButton(onClick = { isEditingName = true }) {
-                                    Icon(Icons.Default.Edit, contentDescription = Localization.translate("edit_name", appLanguage), tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                            } else {
+                                if (isEditingName) {
+                                    OutlinedTextField(
+                                        value = userName,
+                                        onValueChange = { userName = it },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            unfocusedTextColor = Color.White,
+                                            focusedTextColor = Color.White,
+                                            focusedBorderColor = goldSecondary,
+                                            unfocusedBorderColor = Color.White
+                                        ),
+                                        modifier = Modifier.width(150.dp),
+                                        singleLine = true
+                                    )
+                                    IconButton(onClick = { isEditingName = false }) {
+                                        Icon(Icons.Default.Check, contentDescription = Localization.translate("save", appLanguage), tint = goldSecondary)
+                                    }
+                                } else {
+                                    Text(
+                                        text = "$userName ✨",
+                                        color = Color.White,
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    IconButton(onClick = { isEditingName = true }) {
+                                        Icon(Icons.Default.Edit, contentDescription = Localization.translate("edit_name", appLanguage), tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Pulse Ticking Live Clock
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
-                        shape = RoundedCornerShape(12.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        // Pulse Ticking Live Clock
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text(
-                                text = currentTime,
-                                color = goldSecondary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                fontFamily = FontFamily.Monospace
-                            )
-                            Text(
-                                text = Localization.translate("utc_live", appLanguage),
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = currentTime,
+                                    color = goldSecondary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text(
+                                    text = Localization.translate("utc_live", appLanguage),
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // Circular Profile Avatar button
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.15f))
+                                .border(1.5.dp, goldSecondary, CircleShape)
+                                .clickable { onNavigateToFeature("Profile") }
+                                .testTag("profile_avatar_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val user = currentUser
+                            if (user?.photoUrl != null) {
+                                AsyncImage(
+                                    model = user.photoUrl,
+                                    contentDescription = "Profile",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (user != null) Icons.Default.Person else Icons.Default.AccountCircle,
+                                    contentDescription = "Profile",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -162,7 +210,7 @@ fun HomeScreen(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = PrayerCalculator.getHijriDate(),
+                                text = hijriDateString,
                                 color = goldSecondary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp

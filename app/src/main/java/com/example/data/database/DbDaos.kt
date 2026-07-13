@@ -14,6 +14,9 @@ interface BookmarkDao {
     @Query("DELETE FROM bookmarks WHERE surahNumber = :surahNum AND ayahNumber = :ayahNum")
     suspend fun deleteBookmark(surahNum: Int, ayahNum: Int)
 
+    @Delete
+    suspend fun deleteBookmarkEntity(bookmark: BookmarkEntity)
+
     @Query("SELECT EXISTS(SELECT 1 FROM bookmarks WHERE surahNumber = :surahNum AND ayahNumber = :ayahNum)")
     fun isBookmarked(surahNum: Int, ayahNum: Int): Flow<Boolean>
 }
@@ -38,17 +41,17 @@ interface ZikrDao {
     @Query("SELECT * FROM zikr_counters")
     fun getAllCounters(): Flow<List<ZikrCounterEntity>>
 
-    @Query("SELECT * FROM zikr_counters WHERE zikrId = :id")
-    fun getCounterById(id: String): Flow<ZikrCounterEntity?>
+    @Query("SELECT * FROM zikr_counters WHERE zikrId = :id AND userId = :userId")
+    fun getCounterById(id: String, userId: String): Flow<ZikrCounterEntity?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertCounter(counter: ZikrCounterEntity)
 
-    @Query("UPDATE zikr_counters SET count = :count, lastUpdated = :timestamp WHERE zikrId = :id")
-    suspend fun updateCount(id: String, count: Int, timestamp: Long = System.currentTimeMillis())
+    @Query("UPDATE zikr_counters SET count = :count, lastUpdated = :timestamp WHERE zikrId = :id AND userId = :userId")
+    suspend fun updateCount(id: String, userId: String, count: Int, timestamp: Long = System.currentTimeMillis())
 
-    @Query("UPDATE zikr_counters SET isFavorite = :isFav WHERE zikrId = :id")
-    suspend fun toggleFavorite(id: String, isFav: Boolean)
+    @Query("UPDATE zikr_counters SET isFavorite = :isFav WHERE zikrId = :id AND userId = :userId")
+    suspend fun toggleFavorite(id: String, userId: String, isFav: Boolean)
 }
 
 @Dao

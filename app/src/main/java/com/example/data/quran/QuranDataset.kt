@@ -8,49 +8,49 @@ object QuranDataset {
             name = "Mishary Rashid Alafasy",
             description = "Known for his beautiful voice and precise tajweed.",
             imageUrl = "https://images.unsplash.com/photo-1519751138087-5bf79df62d5b?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "http://server8.mp3quran.net/afs/"
+            audioBaseUrl = "https://server8.mp3quran.net/afs/"
         ),
         Reciter(
             id = "abdul_basit",
             name = "Abdul Basit Abdus Samad",
             description = "One of the most famous reciters in history.",
             imageUrl = "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "http://server7.mp3quran.net/basit/"
+            audioBaseUrl = "https://server7.mp3quran.net/basit/"
         ),
         Reciter(
             id = "minshawi",
             name = "Mohamed Siddiq El-Minshawi",
             description = "Famous for his spiritual and emotional recitations.",
             imageUrl = "https://images.unsplash.com/photo-1518241353330-0f7941c2d9b5?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "http://server11.mp3quran.net/minsh/"
+            audioBaseUrl = "https://server11.mp3quran.net/minsh/"
         ),
         Reciter(
             id = "shuraim",
             name = "Saud Al-Shuraim",
             description = "Imam of Masjid al-Haram with a unique, energetic style.",
             imageUrl = "https://images.unsplash.com/photo-1447069387593-a5de0862481e?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "http://server7.mp3quran.net/shur/"
+            audioBaseUrl = "https://server7.mp3quran.net/shur/"
         ),
         Reciter(
             id = "sudais",
             name = "Abdul Rahman Al-Sudais",
             description = "The world-famous Imam of Masjid al-Haram.",
             imageUrl = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "http://server11.mp3quran.net/sds/"
+            audioBaseUrl = "https://server11.mp3quran.net/sds/"
         ),
         Reciter(
             id = "yasser_al_dosari",
             name = "Yasser Al-Dosari",
             description = "Imam of Masjid al-Haram, known for his emotional and captivating voice.",
             imageUrl = "https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "http://server11.mp3quran.net/yaser/"
+            audioBaseUrl = "https://server11.mp3quran.net/yaser/"
         ),
         Reciter(
             id = "islam_sobhi",
             name = "Islam Sobhi",
             description = "Highly expressive and soothing youth-focused recitation style.",
             imageUrl = "https://images.unsplash.com/photo-1564507592333-c60657eea523?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "http://server14.mp3quran.net/is_sobhi/"
+            audioBaseUrl = "https://server14.mp3quran.net/is_sobhi/"
         )
     )
 

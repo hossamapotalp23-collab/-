@@ -49,7 +49,10 @@ fun PrayerScreen(
     val selectedAdhanMuezzin by viewModel.selectedAdhanMuezzin.collectAsStateWithLifecycle()
     val isAdhanEnabled by viewModel.isAdhanEnabled.collectAsStateWithLifecycle()
     val isAdhanNotificationEnabled by viewModel.isAdhanNotificationEnabled.collectAsStateWithLifecycle()
+    val isDSTEnabled by viewModel.isDSTEnabled.collectAsStateWithLifecycle()
+    val isPrayerApproachingAlertEnabled by viewModel.isPrayerApproachingAlertEnabled.collectAsStateWithLifecycle()
     val isPlayingAdhan by viewModel.isPlayingAdhan.collectAsStateWithLifecycle()
+    val isUsingLiveApi by viewModel.isUsingLiveApi.collectAsStateWithLifecycle()
 
     var showCityPresets by remember { mutableStateOf(false) }
     var selectedPresetTab by remember { mutableStateOf(0) } // 0 = Egypt, 1 = Global
@@ -151,7 +154,38 @@ fun PrayerScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     val localizedCity = localizeCityName(city, isAr)
-                                    Text(localizedCity, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(localizedCity, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (isUsingLiveApi) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant,
+                                            contentColor = if (isUsingLiveApi) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isUsingLiveApi) Icons.Default.Cloud else Icons.Default.Schedule,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    text = if (isUsingLiveApi) {
+                                                        if (isAr) "مباشر" else "Live"
+                                                    } else {
+                                                        if (isAr) "تقريبي" else "Local"
+                                                    },
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
                                     Text(if (isAr) "اضغط لتغيير المدينة" else "Tap to change city preset", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
@@ -283,9 +317,71 @@ fun PrayerScreen(
                                     checked = isAdhanNotificationEnabled,
                                     onCheckedChange = { viewModel.toggleAdhanNotificationEnabled() }
                                 )
-                            }
+                             }
 
-                            Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                             // 3. Daylight Saving Time (+1 hr)
+                             Row(
+                                 modifier = Modifier.fillMaxWidth(),
+                                 horizontalArrangement = Arrangement.SpaceBetween,
+                                 verticalAlignment = Alignment.CenterVertically
+                             ) {
+                                 Row(
+                                     verticalAlignment = Alignment.CenterVertically,
+                                     modifier = Modifier.weight(1f)
+                                 ) {
+                                     Icon(Icons.Default.Schedule, contentDescription = "DST", tint = MaterialTheme.colorScheme.primary)
+                                     Spacer(modifier = Modifier.width(12.dp))
+                                     Column {
+                                         Text(
+                                             text = if (isAr) "التوقيت الصيفي (+١ ساعة)" else "Daylight Saving Time (+1h)",
+                                             fontWeight = FontWeight.Medium,
+                                             fontSize = 14.sp
+                                         )
+                                         Text(
+                                             text = if (isAr) "تعديل التوقيت بإضافة ساعة واحدة لمواقيت الصلاة" else "Shift prayer times forward by one hour",
+                                             fontSize = 11.sp,
+                                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                                         )
+                                     }
+                                 }
+                                 Switch(
+                                     checked = isDSTEnabled,
+                                     onCheckedChange = { viewModel.toggleDST() }
+                                 )
+                             }
+
+                             // 4. Toggle Approaching Prayer Alert
+                             Row(
+                                 modifier = Modifier.fillMaxWidth(),
+                                 horizontalArrangement = Arrangement.SpaceBetween,
+                                 verticalAlignment = Alignment.CenterVertically
+                             ) {
+                                 Row(
+                                     verticalAlignment = Alignment.CenterVertically,
+                                     modifier = Modifier.weight(1f)
+                                 ) {
+                                     Icon(Icons.Default.HourglassTop, contentDescription = "Approaching Alert", tint = MaterialTheme.colorScheme.primary)
+                                     Spacer(modifier = Modifier.width(12.dp))
+                                     Column {
+                                         Text(
+                                             text = if (isAr) "تنبيه اقتراب الصلاة (١٥ د)" else "Prayer Approaching Alert (15m)",
+                                             fontWeight = FontWeight.Medium,
+                                             fontSize = 14.sp
+                                         )
+                                         Text(
+                                             text = if (isAr) "تلقي إشعار للتذكير قبل رفع الأذان بـ ١٥ دقيقة" else "Get a warning notification 15 mins before prayer",
+                                             fontSize = 11.sp,
+                                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                                         )
+                                     }
+                                 }
+                                 Switch(
+                                     checked = isPrayerApproachingAlertEnabled,
+                                     onCheckedChange = { viewModel.togglePrayerApproachingAlert() }
+                                 )
+                             }
+
+                             Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
 
                             // 3. Select Muezzin voice
                             Text(

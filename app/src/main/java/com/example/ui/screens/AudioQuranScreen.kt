@@ -46,6 +46,7 @@ fun AudioQuranScreen(
     val selectedSurahId by viewModel.selectedSurahId.collectAsStateWithLifecycle()
     val audioPlaybackSpeed by viewModel.audioPlaybackSpeed.collectAsStateWithLifecycle()
     val sleepTimerSeconds by viewModel.sleepTimerSeconds.collectAsStateWithLifecycle()
+    val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val goldSecondary = Color(0xFFD4AF37)
@@ -287,7 +288,8 @@ fun AudioQuranScreen(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.weight(1f)
                                 ) {
                                     // Surah index badge
                                     Box(
@@ -322,12 +324,87 @@ fun AudioQuranScreen(
                                     }
                                 }
 
-                                Text(
-                                    text = surah.arabicName,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = if (isCurrentSurah) goldSecondary else MaterialTheme.colorScheme.primary
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Text(
+                                        text = surah.arabicName,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = if (isCurrentSurah) goldSecondary else MaterialTheme.colorScheme.primary
+                                    )
+
+                                    // Offline Download Button / Status
+                                    val downloadKey = "${selectedReciter.id}_${surah.id}"
+                                    val downloadState = downloadStates[downloadKey]
+
+                                    when (downloadState) {
+                                        is QuranViewModel.DownloadState.Progress -> {
+                                            Box(
+                                                modifier = Modifier.size(24.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    progress = downloadState.progress,
+                                                    strokeWidth = 2.dp,
+                                                    color = goldSecondary,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                        }
+                                        is QuranViewModel.DownloadState.Completed -> {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CheckCircle,
+                                                    contentDescription = Localization.translate("downloaded", appLanguage),
+                                                    tint = Color(0xFF2E7D32),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                IconButton(
+                                                    onClick = { viewModel.deleteDownloadedSurah(selectedReciter, surah.id) },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = Localization.translate("delete_audio", appLanguage),
+                                                        tint = Color.Red.copy(alpha = 0.7f),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        is QuranViewModel.DownloadState.Error -> {
+                                            IconButton(
+                                                onClick = { viewModel.downloadSurahAudio(selectedReciter, surah.id) },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ErrorOutline,
+                                                    contentDescription = "Error, retry",
+                                                    tint = Color.Red,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                        else -> { // Idle or null
+                                            IconButton(
+                                                onClick = { viewModel.downloadSurahAudio(selectedReciter, surah.id) },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Download,
+                                                    contentDescription = Localization.translate("download", appLanguage),
+                                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

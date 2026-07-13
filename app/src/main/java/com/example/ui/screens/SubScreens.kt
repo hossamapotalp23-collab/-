@@ -1,10 +1,13 @@
 package com.example.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -813,6 +816,8 @@ fun SettingsScreen(viewModel: QuranViewModel, onBack: () -> Unit) {
     val quranFontSize by viewModel.quranFontSize.collectAsStateWithLifecycle()
     val selectedFont by viewModel.selectedArabicFont.collectAsStateWithLifecycle()
     val currentMethod by viewModel.currentCalculationMethod.collectAsStateWithLifecycle()
+    val isTasbeehSoundEnabled by viewModel.isTasbeehSoundEnabled.collectAsStateWithLifecycle()
+    val isTasbeehVibrationEnabled by viewModel.isTasbeehVibrationEnabled.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -831,7 +836,8 @@ fun SettingsScreen(viewModel: QuranViewModel, onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Theme toggle
@@ -925,6 +931,35 @@ fun SettingsScreen(viewModel: QuranViewModel, onBack: () -> Unit) {
                     }
                 }
             }
+
+            Divider()
+
+            // Tasbih Feedback Toggles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(Localization.translate("tasbeeh_sound", appLanguage), fontWeight = FontWeight.Bold)
+                Switch(
+                    checked = isTasbeehSoundEnabled,
+                    onCheckedChange = { viewModel.toggleTasbeehSound() },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFD4AF37))
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(Localization.translate("tasbeeh_vibration", appLanguage), fontWeight = FontWeight.Bold)
+                Switch(
+                    checked = isTasbeehVibrationEnabled,
+                    onCheckedChange = { viewModel.toggleTasbeehVibration() },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFD4AF37))
+                )
+            }
         }
     }
 }
@@ -933,6 +968,9 @@ fun SettingsScreen(viewModel: QuranViewModel, onBack: () -> Unit) {
 fun TasbeehScreen(viewModel: QuranViewModel, onBack: () -> Unit) {
     val count by viewModel.tasbeehCount.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val isSoundEnabled by viewModel.isTasbeehSoundEnabled.collectAsStateWithLifecycle()
+    val isVibeEnabled by viewModel.isTasbeehVibrationEnabled.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -977,7 +1015,22 @@ fun TasbeehScreen(viewModel: QuranViewModel, onBack: () -> Unit) {
                             )
                         )
                     )
-                    .clickable { viewModel.incrementTasbeeh() }
+                    .clickable {
+                        viewModel.incrementTasbeeh()
+                        if (isSoundEnabled) {
+                            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                            audioManager?.playSoundEffect(android.media.AudioManager.FX_KEY_CLICK)
+                        }
+                        if (isVibeEnabled) {
+                            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                vibrator?.vibrate(android.os.VibrationEffect.createOneShot(50, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                            } else {
+                                @Suppress("DEPRECATION")
+                                vibrator?.vibrate(50)
+                            }
+                        }
+                    }
                     .shadow(12.dp, CircleShape),
                 contentAlignment = Alignment.Center
             ) {

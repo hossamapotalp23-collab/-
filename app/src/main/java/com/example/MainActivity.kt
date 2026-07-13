@@ -136,6 +136,7 @@ class MainActivity : ComponentActivity() {
                                 "Audio" -> AudioQuranScreen(viewModel, onBack = goBack)
                                 "Tasbeeh" -> TasbeehScreen(viewModel, onBack = goBack)
                                 "Settings" -> SettingsScreen(viewModel, onBack = goBack)
+                                "Profile" -> ProfileScreen(viewModel, onBack = goBack)
                                 else -> HomeScreen(viewModel, onNavigateToFeature = navigateTo)
                             }
                         }
