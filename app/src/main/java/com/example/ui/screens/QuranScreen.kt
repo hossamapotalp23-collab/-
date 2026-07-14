@@ -7,6 +7,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -78,6 +79,15 @@ fun QuranScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFF0C241B),
+                                Color(0xFF040A07)
+                            ),
+                            radius = 1600f
+                        )
+                    )
             ) {
                 // Search Bar
                 OutlinedTextField(
@@ -142,7 +152,8 @@ fun QuranScreen(
                                             isReaderActive = true
                                         },
                                     shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(16.dp),
@@ -237,7 +248,8 @@ fun QuranScreen(
                                                 isReaderActive = true
                                             },
                                         shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
+                                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                                     ) {
                                         Column(modifier = Modifier.padding(16.dp)) {
                                             Row(
@@ -407,6 +419,15 @@ fun SurahReaderView(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFF0D251C),
+                                Color(0xFF040A07)
+                            ),
+                            radius = 1600f
+                        )
+                    )
             ) {
                 if (isLoadingRealSurah) {
                     LinearProgressIndicator(
@@ -428,7 +449,8 @@ fun SurahReaderView(
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF063B35).copy(alpha = 0.6f)),
+                            border = BorderStroke(1.dp, Color(0xFFD4AF37).copy(alpha = 0.3f))
                         ) {
                             Column(
                                 modifier = Modifier
@@ -472,10 +494,14 @@ fun SurahReaderView(
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isCurrentlyPlaying) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                    Color(0xFF0F8F6B).copy(alpha = 0.15f)
                                 } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                                    Color.White.copy(alpha = 0.04f)
                                 }
+                            ),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (isCurrentlyPlaying) Color(0xFF0F8F6B).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.08f)
                             )
                         ) {
                             Column(

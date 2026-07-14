@@ -35,10 +35,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
+            val appTheme by viewModel.appTheme.collectAsStateWithLifecycle()
             val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
 
-            MyApplicationTheme(darkTheme = isDarkMode) {
+            MyApplicationTheme(themeName = appTheme) {
                 // Custom Stack-based Navigation Engine (Fast, Bulletproof, Zero compilation errors)
                 var currentScreen by remember { mutableStateOf("Home") }
                 val backStack = remember { mutableStateListOf<String>() }
@@ -57,8 +57,8 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        // Display bottom nav only for main hubs (Home, Quran, Prayer, Assistant)
-                        val mainHubs = listOf("Home", "Quran", "Prayer", "Assistant")
+                        // Display bottom nav only for main hubs (Home, Quran, Tasbeeh, Prayer, Settings)
+                        val mainHubs = listOf("Home", "Quran", "Tasbeeh", "Prayer", "Settings")
                         if (currentScreen in mainHubs) {
                             NavigationBar(
                                 modifier = Modifier
@@ -88,6 +88,16 @@ class MainActivity : ComponentActivity() {
                                     colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFD4AF37))
                                 )
                                 NavigationBarItem(
+                                    selected = currentScreen == "Tasbeeh",
+                                    onClick = {
+                                        backStack.clear()
+                                        currentScreen = "Tasbeeh"
+                                    },
+                                    icon = { Icon(Icons.Default.FilterVintage, contentDescription = Localization.translate("tasbeeh", appLanguage)) },
+                                    label = { Text(Localization.translate("tasbeeh", appLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFD4AF37))
+                                )
+                                NavigationBarItem(
                                     selected = currentScreen == "Prayer",
                                     onClick = {
                                         backStack.clear()
@@ -98,13 +108,13 @@ class MainActivity : ComponentActivity() {
                                     colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFD4AF37))
                                 )
                                 NavigationBarItem(
-                                    selected = currentScreen == "Assistant",
+                                    selected = currentScreen == "Settings",
                                     onClick = {
                                         backStack.clear()
-                                        currentScreen = "Assistant"
+                                        currentScreen = "Settings"
                                     },
-                                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = Localization.translate("ai_scholar", appLanguage)) },
-                                    label = { Text(Localization.translate("ai_scholar", appLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                    icon = { Icon(Icons.Default.Settings, contentDescription = Localization.translate("settings", appLanguage)) },
+                                    label = { Text(Localization.translate("settings", appLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                                     colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFD4AF37))
                                 )
                             }
@@ -134,9 +144,11 @@ class MainActivity : ComponentActivity() {
                                 "Quiz" -> MemorizationQuizScreen(viewModel, onBack = goBack)
                                 "Duas" -> DuasScreen(viewModel, onBack = goBack)
                                 "Audio" -> AudioQuranScreen(viewModel, onBack = goBack)
+                                "Radio" -> QuranRadioScreen(viewModel, onBack = goBack)
                                 "Tasbeeh" -> TasbeehScreen(viewModel, onBack = goBack)
                                 "Settings" -> SettingsScreen(viewModel, onBack = goBack)
                                 "Profile" -> ProfileScreen(viewModel, onBack = goBack)
+                                "Downloads" -> DownloadsScreen(viewModel, onBack = goBack)
                                 else -> HomeScreen(viewModel, onNavigateToFeature = navigateTo)
                             }
                         }

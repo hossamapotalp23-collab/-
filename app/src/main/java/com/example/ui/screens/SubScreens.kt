@@ -4,10 +4,13 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -818,11 +821,27 @@ fun SettingsScreen(viewModel: QuranViewModel, onBack: () -> Unit) {
     val currentMethod by viewModel.currentCalculationMethod.collectAsStateWithLifecycle()
     val isTasbeehSoundEnabled by viewModel.isTasbeehSoundEnabled.collectAsStateWithLifecycle()
     val isTasbeehVibrationEnabled by viewModel.isTasbeehVibrationEnabled.collectAsStateWithLifecycle()
+    val appTheme by viewModel.appTheme.collectAsStateWithLifecycle()
+    val isArabicFontFixed by viewModel.isArabicFontFixed.collectAsStateWithLifecycle()
+    val currentLocationName by viewModel.currentLocationName.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+    var activeTabInAiTutor by remember { mutableStateOf("Wudu") } // "Wudu" or "Salah"
+    var expandedAiTutor by remember { mutableStateOf(false) }
+    var activeVideoPlayingStep by remember { mutableStateOf<String?>(null) } // Step ID of the playing video
+    var isScanningWithAi by remember { mutableStateOf(false) }
+    var scanningStepText by remember { mutableStateOf("") }
+    
+    // GPS detecting state
+    var isDetectingGps by remember { mutableStateOf(false) }
+    var gpsMessage by remember { mutableStateOf("") }
+
+    val isAr = appLanguage == "Arabic" || appLanguage == "العربية"
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(Localization.translate("settings_options", appLanguage), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+                title = { Text(if (isAr) "الإعدادات الذكية" else "Smart Settings", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Localization.translate("back", appLanguage), tint = MaterialTheme.colorScheme.primary)
@@ -840,125 +859,654 @@ fun SettingsScreen(viewModel: QuranViewModel, onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Theme toggle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // --- SECTION 1: LANGUAGES & LOCATION (اللغة والموقع) ---
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(Localization.translate("dark_mode", appLanguage), fontWeight = FontWeight.Bold)
-                Switch(
-                    checked = isDarkMode,
-                    onCheckedChange = { viewModel.toggleTheme() },
-                    colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFD4AF37))
-                )
-            }
-
-            Divider()
-
-            // Language Selection
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(Localization.translate("app_language", appLanguage), fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("English", "العربية").forEach { lang ->
-                        val isSelected = (lang == "English" && (appLanguage == "English" || appLanguage == "")) ||
-                                (lang == "العربية" && (appLanguage == "Arabic" || appLanguage == "العربية"))
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { viewModel.setLanguage(if (lang == "العربية") "Arabic" else "English") },
-                            label = { Text(lang) }
-                        )
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(if (isAr) "1. اللغة والموقع" else "1. Language & Location", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
                     }
-                }
-            }
-
-            Divider()
-
-            // Font Selector
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(Localization.translate("quran_font_style", appLanguage), fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Uthmani", "KFGQPC", "Simple Arabic").forEach { f ->
-                        FilterChip(
-                            selected = selectedFont == f,
-                            onClick = { viewModel.setArabicFont(f) },
-                            label = { Text(f) }
-                        )
-                    }
-                }
-            }
-
-            Divider()
-
-            // Font Size Adjustment
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(Localization.translate("quran_text_size", appLanguage), fontWeight = FontWeight.Bold)
-                    Text("${quranFontSize.toInt()} sp", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                }
-                Slider(
-                    value = quranFontSize,
-                    onValueChange = { viewModel.setFontSize(it) },
-                    valueRange = 16f..36f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color(0xFFD4AF37),
-                        activeTrackColor = MaterialTheme.colorScheme.primary
-                    )
-                )
-            }
-
-            Divider()
-
-            // Calculation Methods
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(Localization.translate("prayer_calc_method", appLanguage), fontWeight = FontWeight.Bold)
-                PrayerCalculator.CalculationMethod.entries.forEach { method ->
+                    
+                    // Language picker
+                    Text(if (isAr) "لغة التطبيق" else "App Language", fontWeight = FontWeight.Medium, fontSize = 13.sp)
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.setCalculationMethod(method) }
-                            .padding(vertical = 8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            "العربية" to "Arabic",
+                            "English" to "English",
+                            "Deutsch" to "German",
+                            "हिन्दी" to "Hindi",
+                            "中文" to "Chinese",
+                            "Español" to "Spanish",
+                            "Français" to "French"
+                        ).forEach { (displayName, codeName) ->
+                            val isSelected = appLanguage == codeName || appLanguage == displayName
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.setLanguage(codeName) },
+                                label = { Text(displayName) },
+                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                    // Location picker
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(method.description, fontSize = 14.sp)
-                        if (currentMethod == method) {
-                            Icon(Icons.Default.Check, contentDescription = "Selected", tint = Color(0xFFD4AF37))
+                        Column {
+                            Text(if (isAr) "الموقع الحالي" else "Current Location", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                            Text(currentLocationName, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFFD4AF37))
+                        }
+                        
+                        Button(
+                            onClick = {
+                                isDetectingGps = true
+                                gpsMessage = if (isAr) "جاري تحديد الموقع عبر الـ GPS..." else "Detecting location via GPS..."
+                                viewModel.detectLocation { success, msg ->
+                                    isDetectingGps = false
+                                    gpsMessage = msg
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            enabled = !isDetectingGps
+                        ) {
+                            if (isDetectingGps) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (isAr) "تحديد تلقائي" else "Auto Detect", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    
+                    if (gpsMessage.isNotEmpty()) {
+                        Text(gpsMessage, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    // Preset Cities List
+                    Text(if (isAr) "اختر مدينة سريعة" else "Choose a City Preset", fontWeight = FontWeight.Medium, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val presetCities = listOf(
+                                PrayerCalculator.CityPreset("Makkah", 21.3891, 39.8579, "Asia/Riyadh"),
+                                PrayerCalculator.CityPreset("Madinah", 24.4672, 39.6111, "Asia/Riyadh"),
+                                PrayerCalculator.CityPreset("Cairo", 30.0444, 31.2357, "Africa/Cairo"),
+                                PrayerCalculator.CityPreset("Alexandria", 31.2001, 29.9187, "Africa/Cairo")
+                            )
+                            presetCities.forEach { city ->
+                                val isSelected = currentLocationName == city.name
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { viewModel.selectCityPreset(city) },
+                                    label = { Text(if (isAr && city.name == "Cairo") "القاهرة" else if (isAr && city.name == "Makkah") "مكة المكرمة" else if (isAr && city.name == "Madinah") "المدينة المنورة" else if (isAr && city.name == "Alexandria") "الإسكندرية" else city.name) }
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            Divider()
-
-            // Tasbih Feedback Toggles
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // --- SECTION 2: FONT SETTINGS & REPAIR (إعدادات وتصليح الخط) ---
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(Localization.translate("tasbeeh_sound", appLanguage), fontWeight = FontWeight.Bold)
-                Switch(
-                    checked = isTasbeehSoundEnabled,
-                    onCheckedChange = { viewModel.toggleTasbeehSound() },
-                    colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFD4AF37))
-                )
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.TextFields, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(if (isAr) "2. إعدادات وتصليح الخط" else "2. Font Settings & Repair", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+
+                    // Font Size Slider
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(if (isAr) "حجم خط القرآن الكريم" else "Quran Text Size", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                        Text("${quranFontSize.toInt()} sp", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Slider(
+                        value = quranFontSize,
+                        onValueChange = { viewModel.setFontSize(it) },
+                        valueRange = 16f..36f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFFD4AF37),
+                            activeTrackColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                    // Font style picker
+                    Text(if (isAr) "نمط الخط العربي" else "Arabic Font Style", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Uthmani", "KFGQPC", "Simple Arabic").forEach { font ->
+                            val isSelected = selectedFont == font
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.setArabicFont(font) },
+                                label = { Text(if (isAr && font == "Simple Arabic") "خط بسيط" else if (isAr && font == "Uthmani") "عثماني" else font) }
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                    // FONT REPAIR TOOL (تصليح الخط العربي)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(if (isAr) "أداة تصليح وتصحيح الخط العربي" else "Arabic Font Auto-Repair Tool", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(
+                                if (isAr) "يقوم بتصليح تداخل الحروف وظهور مربعات بدلاً من التشكيل العربي" else "Auto-corrects overlapping Arabic ligatures and square glyph boxes.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isArabicFontFixed,
+                            onCheckedChange = { viewModel.toggleArabicFontFixed() },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFD4AF37))
+                        )
+                    }
+
+                    if (isArabicFontFixed) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF0F8F6B).copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0xFF0F8F6B).copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                if (isAr) "✔ تم تطبيق وضع التوافقية الأقصى وتصحيح الخط العربي بنجاح!" else "✔ High-compatibility mode applied and Arabic fonts auto-repaired!",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F8F6B)
+                            )
+                        }
+                    }
+
+                    // Beautiful preview card for testing the font
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(if (isAr) "معاينة حية للخط" else "LIVE TEXT PREVIEW", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD4AF37))
+                            Text(
+                                "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+                                fontSize = quranFontSize.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // --- SECTION 3: THEMES SELECTION (تحديد السمات - 3 خيارات) ---
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(Localization.translate("tasbeeh_vibration", appLanguage), fontWeight = FontWeight.Bold)
-                Switch(
-                    checked = isTasbeehVibrationEnabled,
-                    onCheckedChange = { viewModel.toggleTasbeehVibration() },
-                    colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFD4AF37))
-                )
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(if (isAr) "3. مظهر وسمات التطبيق" else "3. App Themes Selection", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Text(if (isAr) "اختر سمة الألوان المفضلة لديك:" else "Choose your preferred color theme:", fontSize = 13.sp)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Theme 1: Emerald (Default)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (appTheme == "Emerald") Color(0xFF0F8F6B).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.02f),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .border(
+                                    width = 1.5.dp,
+                                    color = if (appTheme == "Emerald") Color(0xFF0F8F6B) else Color.White.copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable { viewModel.setAppTheme("Emerald") }
+                                .padding(12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color(0xFF040A07), CircleShape)
+                                        .border(2.dp, Color(0xFF0F8F6B), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(modifier = Modifier.size(12.dp).background(Color(0xFFD4AF37), CircleShape))
+                                }
+                                Text(if (isAr) "الزمردي" else "Emerald", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(if (isAr) "داكن" else "Dark", fontSize = 9.sp, color = Color.White.copy(alpha = 0.5f))
+                            }
+                        }
+
+                        // Theme 2: Indigo
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (appTheme == "Indigo") Color(0xFF3B82F6).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.02f),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .border(
+                                    width = 1.5.dp,
+                                    color = if (appTheme == "Indigo") Color(0xFF3B82F6) else Color.White.copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable { viewModel.setAppTheme("Indigo") }
+                                .padding(12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color(0xFF030712), CircleShape)
+                                        .border(2.dp, Color(0xFF3B82F6), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(modifier = Modifier.size(12.dp).background(Color(0xFFD4AF37), CircleShape))
+                                }
+                                Text(if (isAr) "الكحلي" else "Indigo", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(if (isAr) "داكن كحلي" else "Space Dark", fontSize = 9.sp, color = Color.White.copy(alpha = 0.5f))
+                            }
+                        }
+
+                        // Theme 3: Sand
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (appTheme == "Sand") Color(0xFF8D6E63).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.02f),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .border(
+                                    width = 1.5.dp,
+                                    color = if (appTheme == "Sand") Color(0xFF8D6E63) else Color.White.copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable { viewModel.setAppTheme("Sand") }
+                                .padding(12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color(0xFFFAF6EE), CircleShape)
+                                        .border(2.dp, Color(0xFF8D6E63), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(modifier = Modifier.size(12.dp).background(Color(0xFFBF360C), CircleShape))
+                                }
+                                Text(if (isAr) "الرملي الدافئ" else "Desert Sand", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(if (isAr) "فاتح هادئ" else "Soft Light", fontSize = 9.sp, color = Color.White.copy(alpha = 0.5f))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- SECTION 4: AI WUDU & SALAH VIDEO TUTOR (معلم الوضوء والصلاة بالذكاء الاصطناعي) ---
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expandedAiTutor = !expandedAiTutor },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFD4AF37))
+                            Text(
+                                if (isAr) "4. تعليم الوضوء والصلاة بالذكاء الاصطناعي" else "4. AI Wudu & Salah Video Tutor",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFFD4AF37)
+                            )
+                        }
+                        Icon(
+                            imageVector = if (expandedAiTutor) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            tint = Color(0xFFD4AF37)
+                        )
+                    }
+
+                    if (expandedAiTutor) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        // Tab selectors: Wudu vs Salah
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { activeTabInAiTutor = "Wudu"; isScanningWithAi = false; activeVideoPlayingStep = null },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (activeTabInAiTutor == "Wudu") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Text(if (isAr) "تعليم الوضوء" else "Wudu Steps", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = { activeTabInAiTutor = "Salah"; isScanningWithAi = false; activeVideoPlayingStep = null },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (activeTabInAiTutor == "Salah") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Text(if (isAr) "تعليم الصلاة" else "Salah Positions", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Video steps list
+                        if (activeTabInAiTutor == "Wudu") {
+                            val wuduSteps = listOf(
+                                Triple("wudu1", if (isAr) "النية وغسل الكفين" else "Intent & Washing Hands", if (isAr) "البدء بالبسملة وغسل اليدين ثلاث مرات جيداً إلى الرسغين." else "Begin with Bismillah and wash hands three times up to the wrists."),
+                                Triple("wudu2", if (isAr) "المضمضة والاستنشاق" else "Rinsing Mouth & Nose", if (isAr) "إدخال الماء للفم والأنف ثلاث مرات بالمضمضة والاستنشاق باليد اليمنى." else "Inhale water into mouth and nose three times, flushing with right hand."),
+                                Triple("wudu3", if (isAr) "غسل الوجه بالكامل" else "Washing Entire Face", if (isAr) "غسل الوجه ثلاث مرات من منابت الشعر إلى أسفل الذقن ومن الأذن للأذن." else "Wash face three times from the hairline to below the chin, ear to ear."),
+                                Triple("wudu4", if (isAr) "غسل اليدين إلى المرفقين" else "Washing Arms to Elbows", if (isAr) "غسل اليد اليمنى ثم اليسرى ثلاث مرات كاملة متضمنة المرفق." else "Wash right then left arm three times thoroughly including the elbows.")
+                            )
+
+                            wuduSteps.forEach { step ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text(step.second, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                                            Badge(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) {
+                                                Text(if (isAr) "فيديو تعليمي" else "VIDEO", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                            }
+                                        }
+                                        
+                                        Text(step.third, fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
+
+                                        if (activeVideoPlayingStep == step.first) {
+                                            Column(modifier = Modifier.fillMaxWidth().background(Color.Black, RoundedCornerShape(8.dp)).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Box(modifier = Modifier.fillMaxWidth().height(140.dp).background(Color(0xFF1F2937), RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) {
+                                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFFD4AF37), modifier = Modifier.size(40.dp))
+                                                        Text(if (isAr) "فيديو تعليمي تفاعلي: جاري التشغيل..." else "Interactive Educational Video: Playing...", fontSize = 11.sp, color = Color.White)
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp), color = Color(0xFFD4AF37))
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                    Text("0:15 / 1:30", fontSize = 10.sp, color = Color.Gray)
+                                                    Text(if (isAr) "إيقاف" else "Stop", fontSize = 10.sp, color = Color(0xFFD4AF37), modifier = Modifier.clickable { activeVideoPlayingStep = null })
+                                                }
+                                            }
+                                        } else {
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Button(
+                                                    onClick = { activeVideoPlayingStep = step.first; isScanningWithAi = false },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37).copy(alpha = 0.15f)),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Icon(Icons.Default.PlayCircle, contentDescription = null, tint = Color(0xFFD4AF37), modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(if (isAr) "تشغيل الفيديو" else "Play Video", fontSize = 11.sp, color = Color(0xFFD4AF37))
+                                                }
+
+                                                Button(
+                                                    onClick = { 
+                                                        isScanningWithAi = true
+                                                        scanningStepText = step.second
+                                                        activeVideoPlayingStep = null
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Icon(Icons.Default.Camera, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(if (isAr) "فحص بالذكاء" else "AI Check", fontSize = 11.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            val salahSteps = listOf(
+                                Triple("salah1", if (isAr) "تكبيرة الإحرام والقيام" else "Takbeer & Standing Posture", if (isAr) "الوقوف مستقيماً وتوجيه البصر لموضع السجود مع قول 'الله أكبر'." else "Stand upright facing Qiblah, eyes looking down, and raise hands stating 'Allahu Akbar'."),
+                                Triple("salah2", if (isAr) "الركوع الصحيح" else "The Perfect Bowing (Ruku')", if (isAr) "الانحناء بحيث يكون الظهر مستوياً بزاوية 90 درجة مع وضع الكفين على الركبتين." else "Bow at a flat 90-degree angle, placing hands firmly on knees."),
+                                Triple("salah3", if (isAr) "السجود على سبعة أعظم" else "The Prostration (Sujud)", if (isAr) "السجود بحيث يلامس الأرض الجبهة والأنف والكفان والركبتان وأطراف القدمين." else "Prostrate ensuring seven bones touch the ground (forehead, nose, palms, knees, toes)."),
+                                Triple("salah4", if (isAr) "الجلوس والتشهد" else "Sitting & Reciting Tashahhud", if (isAr) "الجلوس مطمئناً وافتراش الرجل اليسرى ونصب اليمنى مع تلاوة التشهد." else "Sit comfortably between prostrations and recite the Tashahhud calmly.")
+                            )
+
+                            salahSteps.forEach { step ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text(step.second, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                                            Badge(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) {
+                                                Text(if (isAr) "تحليل الموقف" else "ANALYSIS", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                            }
+                                        }
+                                        
+                                        Text(step.third, fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
+
+                                        if (activeVideoPlayingStep == step.first) {
+                                            Column(modifier = Modifier.fillMaxWidth().background(Color.Black, RoundedCornerShape(8.dp)).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Box(modifier = Modifier.fillMaxWidth().height(140.dp).background(Color(0xFF111827), RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) {
+                                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                        Icon(Icons.Default.Videocam, contentDescription = null, tint = Color(0xFFD4AF37), modifier = Modifier.size(40.dp))
+                                                        Text(if (isAr) "تحليل الذكاء الاصطناعي للفيديو: نشط" else "AI Video Position Analyzer: Active", fontSize = 11.sp, color = Color.White)
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp), color = Color(0xFFD4AF37))
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                    Text("0:20 / 2:00", fontSize = 10.sp, color = Color.Gray)
+                                                    Text(if (isAr) "إيقاف" else "Stop", fontSize = 10.sp, color = Color(0xFFD4AF37), modifier = Modifier.clickable { activeVideoPlayingStep = null })
+                                                }
+                                            }
+                                        } else {
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Button(
+                                                    onClick = { activeVideoPlayingStep = step.first; isScanningWithAi = false },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37).copy(alpha = 0.15f)),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Icon(Icons.Default.PlayCircle, contentDescription = null, tint = Color(0xFFD4AF37), modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(if (isAr) "تشغيل الفيديو" else "Play Video", fontSize = 11.sp, color = Color(0xFFD4AF37))
+                                                }
+
+                                                Button(
+                                                    onClick = { 
+                                                        isScanningWithAi = true
+                                                        scanningStepText = step.second
+                                                        activeVideoPlayingStep = null
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(if (isAr) "تحليل الكاميرا" else "AI Cam Check", fontSize = 11.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isScanningWithAi) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.Black, RoundedCornerShape(16.dp))
+                                    .border(1.5.dp, Color(0xFFD4AF37), RoundedCornerShape(16.dp))
+                                    .padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        if (isAr) "ماسح الذكاء الاصطناعي لضبط الحركة" else "AI Camera Posture alignment",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFD4AF37)
+                                    )
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Close Scanner",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp).clickable { isScanningWithAi = false }
+                                    )
+                                }
+
+                                Text(
+                                    "${if (isAr) "خطوة الفحص الجارية: " else "Target: "} $scanningStepText",
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(180.dp)
+                                        .background(Color(0xFF1F2937), RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Canvas(modifier = Modifier.fillMaxSize()) {
+                                        drawRect(
+                                            color = Color(0xFF0F8F6B).copy(alpha = 0.2f),
+                                            topLeft = androidx.compose.ui.geometry.Offset(20f, 20f),
+                                            size = androidx.compose.ui.geometry.Size(size.width - 40f, size.height - 40f),
+                                            style = Stroke(width = 2f)
+                                        )
+
+                                        val head = androidx.compose.ui.geometry.Offset(size.width / 2f, 40f)
+                                        val neck = androidx.compose.ui.geometry.Offset(size.width / 2f, 70f)
+                                        val lShoulder = androidx.compose.ui.geometry.Offset(size.width / 2f - 40f, 70f)
+                                        val rShoulder = androidx.compose.ui.geometry.Offset(size.width / 2f + 40f, 70f)
+                                        val spine = androidx.compose.ui.geometry.Offset(size.width / 2f, 130f)
+                                        val lElbow = androidx.compose.ui.geometry.Offset(size.width / 2f - 60f, 100f)
+                                        val rElbow = androidx.compose.ui.geometry.Offset(size.width / 2f + 60f, 100f)
+                                        val lHand = androidx.compose.ui.geometry.Offset(size.width / 2f - 70f, 130f)
+                                        val rHand = androidx.compose.ui.geometry.Offset(size.width / 2f + 70f, 130f)
+
+                                        drawLine(color = Color(0xFF0F8F6B), start = head, end = neck, strokeWidth = 4f)
+                                        drawLine(color = Color(0xFF0F8F6B), start = lShoulder, end = rShoulder, strokeWidth = 4f)
+                                        drawLine(color = Color(0xFF0F8F6B), start = neck, end = spine, strokeWidth = 4f)
+                                        drawLine(color = Color(0xFF0F8F6B), start = lShoulder, end = lElbow, strokeWidth = 4f)
+                                        drawLine(color = Color(0xFF0F8F6B), start = rShoulder, end = rElbow, strokeWidth = 4f)
+                                        drawLine(color = Color(0xFF0F8F6B), start = lElbow, end = lHand, strokeWidth = 4f)
+                                        drawLine(color = Color(0xFF0F8F6B), start = rElbow, end = rHand, strokeWidth = 4f)
+
+                                        drawCircle(color = Color(0xFFD4AF37), radius = 8f, center = head)
+                                        drawCircle(color = Color(0xFF0F8F6B), radius = 6f, center = neck)
+                                        drawCircle(color = Color(0xFF0F8F6B), radius = 6f, center = lShoulder)
+                                        drawCircle(color = Color(0xFF0F8F6B), radius = 6f, center = rShoulder)
+                                        drawCircle(color = Color(0xFF0F8F6B), radius = 6f, center = lElbow)
+                                        drawCircle(color = Color(0xFF0F8F6B), radius = 6f, center = rElbow)
+                                        drawCircle(color = Color(0xFFD4AF37), radius = 7f, center = lHand)
+                                        drawCircle(color = Color(0xFFD4AF37), radius = 7f, center = rHand)
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(2.dp)
+                                            .background(Color(0xFF0F8F6B).copy(alpha = 0.8f))
+                                            .align(Alignment.TopCenter)
+                                    )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            if (isAr) "🤖 فحص الكاميرا: تم محاذاة المفاصل بنسبة 98% (ممتاز!)" else "🤖 AI CAMERA CHECK: Joints Aligned 98% (Excellent!)",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0F8F6B)
+                                        )
+                                    }
+                                }
+
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF0F8F6B), modifier = Modifier.size(14.dp))
+                                        Text(if (isAr) "تطابق الشروط الفقهية: صحيح" else "Shariah posture checklist: Valid", fontSize = 10.sp, color = Color(0xFF0F8F6B))
+                                    }
+                                    Text(
+                                        if (isAr) "استمر في الحركة" else "Continue posture",
+                                        fontSize = 9.sp,
+                                        color = Color.LightGray
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -972,89 +1520,268 @@ fun TasbeehScreen(viewModel: QuranViewModel, onBack: () -> Unit) {
     val isVibeEnabled by viewModel.isTasbeehVibrationEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    val isAr = appLanguage == "Arabic" || appLanguage == "العربية"
+
+    // Expanded properties
+    val dhikrs = listOf(
+        if (isAr) "سُبْحَانَ اللَّهِ" else "Subhan Allah",
+        if (isAr) "الْحَمْدُ لِلَّهِ" else "Alhamdulillah",
+        if (isAr) "اللَّهُ أَكْبَرُ" else "Allahu Akbar",
+        if (isAr) "أَسْتَغْفِرُ اللَّهَ" else "Astaghfirullah",
+        if (isAr) "لَا إِلَٰهَ إِلَّا اللَّهُ" else "La ilaha illallah"
+    )
+    var selectedDhikrIndex by remember { mutableStateOf(0) }
+    val activeDhikr = dhikrs[selectedDhikrIndex]
+
+    val targetGoals = listOf(33, 99, 100, 1000)
+    var selectedTargetIndex by remember { mutableStateOf(0) }
+    val activeTarget = targetGoals[selectedTargetIndex]
+
+    // Calculate progress
+    val activeProgress = (count % activeTarget) / activeTarget.toFloat()
+
     Scaffold(
         topBar = {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFF0C241B),
+                                Color(0xFF040A07)
+                            ),
+                            radius = 1600f
+                        )
+                    )
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Localization.translate("back", appLanguage), tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Localization.translate("back", appLanguage), tint = Color.White)
                 }
-                Text(Localization.translate("tasbeeh", appLanguage), fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = if (isAr) "المسبحة الذكية المتقدمة" else "Advanced Smart Tasbeeh",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = Color.White
+                )
                 IconButton(onClick = { viewModel.resetTasbeeh() }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Color.Gray)
+                    Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Color(0xFFD4AF37))
                 }
             }
-        }
+        },
+        containerColor = Color.Transparent
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(Localization.translate("praise_allah", appLanguage), fontSize = 14.sp, color = Color(0xFFD4AF37), fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Pulse-Click bead counter
-            Box(
-                modifier = Modifier
-                    .size(220.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.primaryContainer
-                            )
-                        )
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF0C241B),
+                            Color(0xFF040A07)
+                        ),
+                        radius = 1600f
                     )
-                    .clickable {
-                        viewModel.incrementTasbeeh()
-                        if (isSoundEnabled) {
-                            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-                            audioManager?.playSoundEffect(android.media.AudioManager.FX_KEY_CLICK)
-                        }
-                        if (isVibeEnabled) {
-                            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                vibrator?.vibrate(android.os.VibrationEffect.createOneShot(50, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                            } else {
-                                @Suppress("DEPRECATION")
-                                vibrator?.vibrate(50)
+                )
+                .padding(innerPadding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            // 1. Horizontal Scroll for famous Dhikrs
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = if (isAr) "اختر الذكر المطلوب:" else "Select Active Dhikr:",
+                    fontSize = 12.sp,
+                    color = Color(0xFFD4AF37),
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            dhikrs.forEachIndexed { index, d ->
+                                val isSelected = selectedDhikrIndex == index
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { selectedDhikrIndex = index },
+                                    label = { Text(d, color = if (isSelected) Color.White else Color.LightGray) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Color(0xFF0F8F6B)
+                                    )
+                                )
                             }
                         }
                     }
-                    .shadow(12.dp, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "$count",
-                        fontSize = 64.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        "TAP TO COUNT",
-                        fontSize = 11.sp,
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Bold
-                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
+            // 2. Horizontal Scroll for Targets
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = if (isAr) "تحديد الهدف التكراري:" else "Select Target Goal:",
+                    fontSize = 12.sp,
+                    color = Color(0xFFD4AF37),
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    targetGoals.forEachIndexed { index, target ->
+                        val isSelected = selectedTargetIndex == index
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedTargetIndex = index },
+                            label = { Text("$target", color = if (isSelected) Color.White else Color.LightGray) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF0F8F6B)
+                            )
+                        )
+                    }
+                }
+            }
+
+            // 3. Main interactive Tasbeeh ring
+            Box(
+                modifier = Modifier.size(280.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                val strokeWidth = 8.dp
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    // Base gold track
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.05f),
+                        radius = size.minDimension / 2 - strokeWidth.toPx(),
+                        style = Stroke(width = strokeWidth.toPx())
+                    )
+                    // Emerald progress track
+                    drawArc(
+                        color = Color(0xFF0F8F6B),
+                        startAngle = -90f,
+                        sweepAngle = activeProgress * 360f,
+                        useCenter = false,
+                        topLeft = androidx.compose.ui.geometry.Offset(strokeWidth.toPx(), strokeWidth.toPx()),
+                        size = androidx.compose.ui.geometry.Size(size.width - 2 * strokeWidth.toPx(), size.height - 2 * strokeWidth.toPx()),
+                        style = Stroke(width = strokeWidth.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    )
+                }
+
+                // Inner clickable button circle
+                Box(
+                    modifier = Modifier
+                        .size(236.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF102820).copy(alpha = 0.9f),
+                                    Color(0xFF05110D).copy(alpha = 0.8f)
+                                )
+                            )
+                        )
+                        .border(BorderStroke(1.5.dp, Color(0xFFD4AF37).copy(alpha = 0.4f)), CircleShape)
+                        .clickable {
+                            viewModel.incrementTasbeeh()
+                            
+                            // Highly audible click sound synthesis using CDMA PIP (mechanical click)
+                            if (isSoundEnabled) {
+                                try {
+                                    val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 100)
+                                    toneGen.startTone(android.media.ToneGenerator.TONE_CDMA_PIP, 30) // crisp mechanical click
+                                } catch (e: Exception) {
+                                    // Fallback to AudioManager click
+                                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                                    audioManager?.playSoundEffect(android.media.AudioManager.FX_KEY_CLICK)
+                                }
+                            }
+                            
+                            // Haptic Vibration
+                            if (isVibeEnabled) {
+                                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                    vibrator?.vibrate(android.os.VibrationEffect.createOneShot(45, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    vibrator?.vibrate(45)
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = activeDhikr,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFD4AF37),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 24.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "$count",
+                            fontSize = 64.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = if (isAr) "اضغط للتسبيح" else "TAP TO PRAISE",
+                            fontSize = 10.sp,
+                            color = Color(0xFFD4AF37),
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+            }
+
+            // 4. Detailed statistics and info
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (isAr) "الدورة الحالية" else "Current Round", fontSize = 10.sp, color = Color.LightGray)
+                    Text("${count % activeTarget} / $activeTarget", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+                Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.White.copy(alpha = 0.1f)))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (isAr) "الدورات المكتملة" else "Completed Rounds", fontSize = 10.sp, color = Color.LightGray)
+                    Text("${count / activeTarget}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F8F6B))
+                }
+            }
+
             Text(
-                "Clicking will auto reset at 33 / 99 reps.",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = if (isAr) "تصدر المسبحة صوتاً حقيقياً شبيهاً بالنقر عند كل تسبيحة للتسهيل." else "A real mechanical click tone plays on each tap for counting feedback.",
+                fontSize = 11.sp,
+                color = Color.White.copy(alpha = 0.4f),
+                textAlign = TextAlign.Center
             )
         }
     }

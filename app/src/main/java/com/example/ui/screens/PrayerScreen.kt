@@ -53,6 +53,7 @@ fun PrayerScreen(
     val isPrayerApproachingAlertEnabled by viewModel.isPrayerApproachingAlertEnabled.collectAsStateWithLifecycle()
     val isPlayingAdhan by viewModel.isPlayingAdhan.collectAsStateWithLifecycle()
     val isUsingLiveApi by viewModel.isUsingLiveApi.collectAsStateWithLifecycle()
+    val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
 
     var showCityPresets by remember { mutableStateOf(false) }
     var selectedPresetTab by remember { mutableStateOf(0) } // 0 = Egypt, 1 = Global
@@ -383,7 +384,62 @@ fun PrayerScreen(
 
                              Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
 
-                            // 3. Select Muezzin voice
+                            // 5. Battery Optimization Exempt for Background Work
+                             Row(
+                                 modifier = Modifier.fillMaxWidth(),
+                                 horizontalArrangement = Arrangement.SpaceBetween,
+                                 verticalAlignment = Alignment.CenterVertically
+                             ) {
+                                 Row(
+                                     verticalAlignment = Alignment.CenterVertically,
+                                     modifier = Modifier.weight(1f)
+                                 ) {
+                                     Icon(Icons.Default.BatteryAlert, contentDescription = "Battery Optimization", tint = MaterialTheme.colorScheme.primary)
+                                     Spacer(modifier = Modifier.width(12.dp))
+                                     Column {
+                                         Text(
+                                             text = Localization.translate("battery_card_title", if (isAr) "العربية" else "English"),
+                                             fontWeight = FontWeight.Medium,
+                                             fontSize = 14.sp
+                                         )
+                                         Text(
+                                             text = Localization.translate("battery_card_desc", if (isAr) "العربية" else "English"),
+                                             fontSize = 11.sp,
+                                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                                         )
+                                     }
+                                 }
+                                 Button(
+                                     onClick = {
+                                         try {
+                                             val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                             context.startActivity(intent)
+                                         } catch (e: Exception) {
+                                             try {
+                                                 val intent = android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+                                                 context.startActivity(intent)
+                                             } catch (ex: Exception) {
+                                                 // ignore
+                                             }
+                                         }
+                                     },
+                                     colors = ButtonDefaults.buttonColors(
+                                         containerColor = MaterialTheme.colorScheme.primary
+                                     ),
+                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                     modifier = Modifier.height(36.dp)
+                                 ) {
+                                     Text(
+                                         text = if (isAr) "استثناء" else "Exempt",
+                                         fontSize = 12.sp,
+                                         fontWeight = FontWeight.Bold
+                                      )
+                                 }
+                             }
+
+                             Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+
+                             // 3. Select Muezzin voice
                             Text(
                                 text = if (isAr) "اختر صوت المؤذن" else "Select Muezzin Voice",
                                 fontWeight = FontWeight.Bold,
@@ -424,22 +480,71 @@ fun PrayerScreen(
                                     }
 
                                     // Preview/Stop Button for each Muezzin!
-                                    val isCurrentPlayingAdhan = isPlayingAdhan && isSelected
-                                    IconButton(
-                                        onClick = {
-                                            if (isCurrentPlayingAdhan) {
-                                                viewModel.stopAdhan()
-                                            } else {
-                                                viewModel.playAdhan(muezzin)
-                                            }
-                                        }
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isCurrentPlayingAdhan) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                            contentDescription = "Preview Voice",
-                                            tint = if (isCurrentPlayingAdhan) Color.Red else MaterialTheme.colorScheme.primary
-                                        )
-                                    }
+                                     Row(
+                                         verticalAlignment = Alignment.CenterVertically,
+                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                     ) {
+                                         // Preview Button
+                                         val isCurrentPlayingAdhan = isPlayingAdhan && isSelected
+                                         IconButton(
+                                             onClick = {
+                                                 if (isCurrentPlayingAdhan) {
+                                                     viewModel.stopAdhan()
+                                                 } else {
+                                                     viewModel.playAdhan(muezzin)
+                                                 }
+                                             },
+                                             modifier = Modifier.size(32.dp)
+                                         ) {
+                                             Icon(
+                                                 imageVector = if (isCurrentPlayingAdhan) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                                 contentDescription = "Preview Voice",
+                                                 tint = if (isCurrentPlayingAdhan) Color.Red else MaterialTheme.colorScheme.primary,
+                                                 modifier = Modifier.size(20.dp)
+                                             )
+                                         }
+
+                                         // Download Button
+                                         val adhanKey = "adhan_${muezzin.id}"
+                                         when (val state = downloadStates[adhanKey]) {
+                                             is QuranViewModel.DownloadState.Progress -> {
+                                                 CircularProgressIndicator(
+                                                     progress = state.progress,
+                                                     modifier = Modifier.size(18.dp),
+                                                     strokeWidth = 2.dp,
+                                                     color = MaterialTheme.colorScheme.primary
+                                                 )
+                                             }
+                                             is QuranViewModel.DownloadState.Completed -> {
+                                                 IconButton(
+                                                     onClick = { viewModel.deleteDownloadedAdhan(muezzin) },
+                                                     modifier = Modifier.size(32.dp)
+                                                 ) {
+                                                     Icon(
+                                                         imageVector = Icons.Default.CheckCircle,
+                                                         contentDescription = "Downloaded",
+                                                         tint = Color(0xFF2E7D32),
+                                                         modifier = Modifier.size(18.dp)
+                                                     )
+                                                 }
+                                             }
+                                             else -> {
+                                                 IconButton(
+                                                     onClick = { viewModel.downloadAdhanAudio(muezzin) },
+                                                     modifier = Modifier.size(32.dp)
+                                                 ) {
+                                                     Icon(
+                                                         imageVector = Icons.Default.Download,
+                                                         contentDescription = "Download",
+                                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                         modifier = Modifier.size(18.dp)
+                                                     )
+                                                 }
+                                             }
+                                         }
+                                     }
+                                     
+
                                 }
                             }
                         }

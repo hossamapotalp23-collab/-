@@ -187,10 +187,10 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     private val _quranSearchQuery = MutableStateFlow("")
     val quranSearchQuery = _quranSearchQuery.asStateFlow()
 
-    private val _selectedArabicFont = MutableStateFlow("Uthmani")
+    private val _selectedArabicFont = MutableStateFlow(prefs.getString("selected_arabic_font", "Uthmani") ?: "Uthmani")
     val selectedArabicFont = _selectedArabicFont.asStateFlow()
 
-    private val _quranFontSize = MutableStateFlow(24f)
+    private val _quranFontSize = MutableStateFlow(prefs.getFloat("quran_font_size", 24f))
     val quranFontSize = _quranFontSize.asStateFlow()
 
     // Audio Reciter State
@@ -199,6 +199,13 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
 
     private val _isPlayingAudio = MutableStateFlow(false)
     val isPlayingAudio = _isPlayingAudio.asStateFlow()
+
+    // Live Radio State
+    private val _isPlayingRadio = MutableStateFlow(false)
+    val isPlayingRadio = _isPlayingRadio.asStateFlow()
+
+    private val _currentPlayingRadioUrl = MutableStateFlow<String?>(null)
+    val currentPlayingRadioUrl = _currentPlayingRadioUrl.asStateFlow()
 
     private val _currentPlayingAyah = MutableStateFlow<Ayah?>(null)
     val currentPlayingAyah = _currentPlayingAyah.asStateFlow()
@@ -243,11 +250,17 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     val aiThinking = _aiThinking.asStateFlow()
 
     // Settings
-    private val _isDarkMode = MutableStateFlow(true)
+    private val _isDarkMode = MutableStateFlow(prefs.getBoolean("is_dark_mode", true))
     val isDarkMode = _isDarkMode.asStateFlow()
 
-    private val _appLanguage = MutableStateFlow("English")
+    private val _appLanguage = MutableStateFlow(prefs.getString("app_language", "Arabic") ?: "Arabic")
     val appLanguage = _appLanguage.asStateFlow()
+
+    private val _appTheme = MutableStateFlow(prefs.getString("app_theme", "Emerald") ?: "Emerald")
+    val appTheme = _appTheme.asStateFlow()
+
+    private val _isArabicFontFixed = MutableStateFlow(prefs.getBoolean("is_arabic_font_fixed", false))
+    val isArabicFontFixed = _isArabicFontFixed.asStateFlow()
 
     data class QuizQuestion(
         val type: String,
@@ -289,9 +302,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                         val nameWithoutExt = file.name.substringBeforeLast(".")
                         val parts = nameWithoutExt.split("_")
                         if (parts.size == 2) {
-                            val reciterId = parts[0]
-                            val surahId = parts[1].toIntOrNull() ?: 0
-                            initialMap["${reciterId}_$surahId"] = DownloadState.Completed
+                            val part0 = parts[0]
+                            if (part0 == "adhan") {
+                                val muezzinId = parts[1]
+                                initialMap["adhan_$muezzinId"] = DownloadState.Completed
+                            } else {
+                                val surahId = parts[1].toIntOrNull() ?: 0
+                                initialMap["${part0}_$surahId"] = DownloadState.Completed
+                            }
                         }
                     }
                 }
@@ -322,7 +340,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         viewModelScope.launch {
             while (true) {
                 val cal = Calendar.getInstance()
-                val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                val sdf = SimpleDateFormat("hh:mm:ss a", Locale.getDefault())
                 _currentTime.value = sdf.format(cal.time)
 
                 // Update Prayer Times calculations dynamically
@@ -476,10 +494,12 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
 
     fun setArabicFont(font: String) {
         _selectedArabicFont.value = font
+        prefs.edit().putString("selected_arabic_font", font).apply()
     }
 
     fun setFontSize(size: Float) {
         _quranFontSize.value = size
+        prefs.edit().putFloat("quran_font_size", size).apply()
     }
 
     // Bookmarks
@@ -556,6 +576,10 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                 Log.e("QuranViewModel", "Error pausing MediaPlayer: ${e.message}")
             }
         } else {
+            // Stop live radio if it was playing
+            if (_isPlayingRadio.value) {
+                stopRadio()
+            }
             _isPlayingAudio.value = true
             if (currentLoadedUrl == audioUrl && mediaPlayer != null) {
                 try {
@@ -611,10 +635,12 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                     }
                     setOnCompletionListener {
                         _isPlayingAudio.value = false
+                        _isPlayingRadio.value = false
                         _currentPlayingAyah.value = null
                     }
                     setOnErrorListener { _, _, _ ->
                         _isPlayingAudio.value = false
+                        _isPlayingRadio.value = false
                         _currentPlayingAyah.value = null
                         true
                     }
@@ -622,7 +648,39 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
             } catch (e: Exception) {
                 Log.e("QuranViewModel", "Error in playAudioStream: ${e.message}")
                 _isPlayingAudio.value = false
+                _isPlayingRadio.value = false
             }
+        }
+    }
+
+    fun playRadio(url: String) {
+        // Stop any currently playing Quran surah audio
+        if (_isPlayingAudio.value) {
+            _isPlayingAudio.value = false
+            try {
+                if (mediaPlayer?.isPlaying == true) {
+                    mediaPlayer?.pause()
+                }
+            } catch (e: Exception) {
+                Log.e("QuranViewModel", "Error pausing MediaPlayer: ${e.message}")
+            }
+        }
+
+        _isPlayingRadio.value = true
+        _currentPlayingRadioUrl.value = url
+        playAudioStream(url)
+    }
+
+    fun stopRadio() {
+        _isPlayingRadio.value = false
+        _currentPlayingRadioUrl.value = null
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+            }
+            mediaPlayer?.reset()
+        } catch (e: Exception) {
+            Log.e("QuranViewModel", "Error stopping radio: ${e.message}")
         }
     }
 
@@ -1159,11 +1217,39 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
 
     // Settings modifiers
     fun toggleTheme() {
-        _isDarkMode.value = !_isDarkMode.value
+        val newVal = !_isDarkMode.value
+        _isDarkMode.value = newVal
+        prefs.edit().putBoolean("is_dark_mode", newVal).apply()
     }
 
     fun setLanguage(lang: String) {
         _appLanguage.value = lang
+        prefs.edit().putString("app_language", lang).apply()
+    }
+
+    fun setAppTheme(theme: String) {
+        _appTheme.value = theme
+        prefs.edit().putString("app_theme", theme).apply()
+        if (theme == "Sand") {
+            _isDarkMode.value = false
+            prefs.edit().putBoolean("is_dark_mode", false).apply()
+        } else {
+            _isDarkMode.value = true
+            prefs.edit().putBoolean("is_dark_mode", true).apply()
+        }
+    }
+
+    fun toggleArabicFontFixed() {
+        val newVal = !_isArabicFontFixed.value
+        _isArabicFontFixed.value = newVal
+        prefs.edit().putBoolean("is_arabic_font_fixed", newVal).apply()
+        if (newVal) {
+            _selectedArabicFont.value = "Simple Arabic"
+            prefs.edit().putString("selected_arabic_font", "Simple Arabic").apply()
+        } else {
+            _selectedArabicFont.value = "Uthmani"
+            prefs.edit().putString("selected_arabic_font", "Uthmani").apply()
+        }
     }
 
     // --- Adhan & Notification Playback ---
@@ -1173,7 +1259,13 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         viewModelScope.launch(Dispatchers.Main) {
             try {
                 adhanMediaPlayer = android.media.MediaPlayer().apply {
-                    setDataSource(muezzin.audioUrl)
+                    val context = getApplication<Application>().applicationContext
+                    val localFile = File(File(context.filesDir, "audio_downloads"), "adhan_${muezzin.id}.mp3")
+                    if (localFile.exists()) {
+                        setDataSource(localFile.absolutePath)
+                    } else {
+                        setDataSource(muezzin.audioUrl)
+                    }
                     setOnPreparedListener { mp ->
                         mp.start()
                     }
@@ -1319,6 +1411,73 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
             val formattedSurahId = String.format("%03d", surahId)
             val context = getApplication<Application>().applicationContext
             val targetFile = File(File(context.filesDir, "audio_downloads"), "${reciter.id}_${formattedSurahId}.mp3")
+            if (targetFile.exists()) {
+                targetFile.delete()
+            }
+            _downloadStates.value = _downloadStates.value - key
+        }
+    }
+
+    fun downloadAdhanAudio(muezzin: PrayerCalculator.AdhanMuezzin) {
+        val key = "adhan_${muezzin.id}"
+        _downloadStates.value = _downloadStates.value + (key to DownloadState.Progress(0f))
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val url = URL(muezzin.audioUrl)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.connect()
+                
+                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                    throw Exception("Server returned code ${connection.responseCode}")
+                }
+                
+                val fileLength = connection.contentLength
+                val context = getApplication<Application>().applicationContext
+                val downloadDir = File(context.filesDir, "audio_downloads")
+                if (!downloadDir.exists()) {
+                    downloadDir.mkdirs()
+                }
+                val tempFile = File(downloadDir, "adhan_${muezzin.id}.tmp")
+                val targetFile = File(downloadDir, "adhan_${muezzin.id}.mp3")
+                
+                connection.inputStream.use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        val data = ByteArray(4096)
+                        var total: Long = 0
+                        var count: Int
+                        while (input.read(data).also { count = it } != -1) {
+                            total += count
+                            if (fileLength > 0) {
+                                val progress = total.toFloat() / fileLength
+                                _downloadStates.value = _downloadStates.value + (key to DownloadState.Progress(progress))
+                            }
+                            output.write(data, 0, count)
+                        }
+                    }
+                }
+                
+                if (tempFile.renameTo(targetFile)) {
+                    _downloadStates.value = _downloadStates.value + (key to DownloadState.Completed)
+                } else {
+                    tempFile.copyTo(targetFile, overwrite = true)
+                    tempFile.delete()
+                    _downloadStates.value = _downloadStates.value + (key to DownloadState.Completed)
+                }
+            } catch (e: Exception) {
+                Log.e("QuranViewModel", "Error downloading adhan: ${e.message}", e)
+                _downloadStates.value = _downloadStates.value + (key to DownloadState.Error(e.message ?: "Unknown error"))
+            }
+        }
+    }
+
+    fun deleteDownloadedAdhan(muezzin: PrayerCalculator.AdhanMuezzin) {
+        val key = "adhan_${muezzin.id}"
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>().applicationContext
+            val targetFile = File(File(context.filesDir, "audio_downloads"), "adhan_${muezzin.id}.mp3")
             if (targetFile.exists()) {
                 targetFile.delete()
             }

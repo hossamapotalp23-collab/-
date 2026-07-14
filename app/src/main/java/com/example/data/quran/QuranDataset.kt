@@ -22,7 +22,7 @@ object QuranDataset {
             name = "Mohamed Siddiq El-Minshawi",
             description = "Famous for his spiritual and emotional recitations.",
             imageUrl = "https://images.unsplash.com/photo-1518241353330-0f7941c2d9b5?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "https://server11.mp3quran.net/minsh/"
+            audioBaseUrl = "https://server10.mp3quran.net/minsh/"
         ),
         Reciter(
             id = "shuraim",
@@ -43,14 +43,14 @@ object QuranDataset {
             name = "Yasser Al-Dosari",
             description = "Imam of Masjid al-Haram, known for his emotional and captivating voice.",
             imageUrl = "https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "https://server11.mp3quran.net/yaser/"
+            audioBaseUrl = "https://server11.mp3quran.net/yasser/"
         ),
         Reciter(
             id = "islam_sobhi",
             name = "Islam Sobhi",
             description = "Highly expressive and soothing youth-focused recitation style.",
             imageUrl = "https://images.unsplash.com/photo-1564507592333-c60657eea523?w=400&auto=format&fit=crop&q=60",
-            audioBaseUrl = "https://server14.mp3quran.net/is_sobhi/"
+            audioBaseUrl = "https://server14.mp3quran.net/islam/Rewayat-Hafs-A-n-Assem/"
         )
     )
 

@@ -83,7 +83,10 @@ object PrayerCalculator {
         AdhanMuezzin("abdul_basit", "عبد الباسط عبد الصمد", "Abdul Basit Abdus Samad", "https://www.islamcan.com/audio/adhan/azan2.mp3"),
         AdhanMuezzin("alafasy", "مشاري راشد العفاسي", "Mishary Rashid Alafasy", "https://www.islamcan.com/audio/adhan/azan20.mp3"),
         AdhanMuezzin("madinah", "أذان المدينة المنورة", "Madinah Adhan", "https://www.islamcan.com/audio/adhan/azan16.mp3"),
-        AdhanMuezzin("luhaidan", "محمد اللحيدان", "Muhammad Al-Luhaidan", "https://www.islamcan.com/audio/adhan/azan10.mp3")
+        AdhanMuezzin("luhaidan", "محمد اللحيدان", "Muhammad Al-Luhaidan", "https://www.islamcan.com/audio/adhan/azan10.mp3"),
+        AdhanMuezzin("alaqsa", "أذان المسجد الأقصى", "Al-Aqsa Mosque Adhan", "https://www.islamcan.com/audio/adhan/azan4.mp3"),
+        AdhanMuezzin("egypt", "أذان من مصر", "Egyptian Adhan", "https://www.islamcan.com/audio/adhan/azan6.mp3"),
+        AdhanMuezzin("turkey", "أذان من تركيا", "Turkish Adhan", "https://www.islamcan.com/audio/adhan/azan8.mp3")
     )
 
     enum class CalculationMethod(val description: String) {
