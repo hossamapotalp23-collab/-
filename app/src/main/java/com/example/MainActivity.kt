@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
                                 "Audio" -> AudioQuranScreen(viewModel, onBack = goBack)
                                 "Radio" -> QuranRadioScreen(viewModel, onBack = goBack)
                                 "Tasbeeh" -> TasbeehScreen(viewModel, onBack = goBack)
+                                "Zakat" -> ZakatScreen(viewModel, onBack = goBack)
                                 "Settings" -> SettingsScreen(viewModel, onBack = goBack)
                                 "Profile" -> ProfileScreen(viewModel, onBack = goBack)
                                 "Downloads" -> DownloadsScreen(viewModel, onBack = goBack)

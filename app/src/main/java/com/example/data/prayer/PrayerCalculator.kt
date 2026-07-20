@@ -127,6 +127,25 @@ object PrayerCalculator {
     }
 
     /**
+     * Calculates the distance in kilometers from the user's location to the Kaaba.
+     */
+    fun calculateDistanceToKaaba(latitude: Double, longitude: Double): Double {
+        val r = 6371.0 // Earth's radius in kilometers
+        val userLatRad = Math.toRadians(latitude)
+        val userLngRad = Math.toRadians(longitude)
+        val kaabaLatRad = Math.toRadians(KAABA_LAT)
+        val kaabaLngRad = Math.toRadians(KAABA_LNG)
+
+        val dLat = kaabaLatRad - userLatRad
+        val dLng = kaabaLngRad - userLngRad
+
+        val a = sin(dLat / 2).pow(2) + cos(userLatRad) * cos(kaabaLatRad) * sin(dLng / 2).pow(2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+        return r * c
+    }
+
+    /**
      * Calculates realistic prayer times based on latitude, longitude, and date.
      * This uses a robust approximation with astronomical offsets, ensuring accuracy
      * across different calendar days and custom calculation methods.
@@ -228,9 +247,12 @@ object PrayerCalculator {
     /**
      * Gets simple Hijri date string approximation
      */
-    fun getHijriDate(): String {
+    fun getHijriDate(offsetDays: Int = 0, isArabic: Boolean = false): String {
         // We can approximate based on Gregorian calendars and standard shifts
         val calendar = Calendar.getInstance()
+        if (offsetDays != 0) {
+            calendar.add(Calendar.DAY_OF_YEAR, offsetDays)
+        }
         val day = calendar.get(Calendar.DAY_OF_MONTH)
         val month = calendar.get(Calendar.MONTH)
         val year = calendar.get(Calendar.YEAR)
@@ -239,16 +261,26 @@ object PrayerCalculator {
         // Hijri year = (Gregorian - 622) * (33 / 32)
         val hijriYear = ((year - 622) * 32.5 / 31.5).toInt()
         
-        val hijriMonths = listOf(
+        val hijriMonthsEn = listOf(
             "Muharram", "Safar", "Rabi' al-Awwal", "Rabi' ath-Thani",
             "Jumada al-Awwal", "Jumada ath-Thani", "Rajab", "Sha'ban",
             "Ramadan", "Shawwal", "Dhu al-Qi'dah", "Dhu al-Hijjah"
+        )
+
+        val hijriMonthsAr = listOf(
+            "محرم", "صفر", "ربيع الأول", "ربيع الآخر",
+            "جمادى الأولى", "جمادى الآخرة", "رجب", "شعبان",
+            "رمضان", "شوال", "ذو القعدة", "ذو الحجة"
         )
         
         // Approximate day and month
         val approxHijriMonthIndex = (month + 8) % 12
         val approxHijriDay = (day + 15) % 30 + 1
         
-        return "$approxHijriDay ${hijriMonths[approxHijriMonthIndex]}, $hijriYear AH"
+        return if (isArabic) {
+            "$approxHijriDay ${hijriMonthsAr[approxHijriMonthIndex]}، $hijriYear هـ"
+        } else {
+            "$approxHijriDay ${hijriMonthsEn[approxHijriMonthIndex]}, $hijriYear AH"
+        }
     }
 }

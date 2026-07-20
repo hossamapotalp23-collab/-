@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,8 +56,16 @@ fun PrayerScreen(
     val isUsingLiveApi by viewModel.isUsingLiveApi.collectAsStateWithLifecycle()
     val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
 
+    val fajrOffset by viewModel.fajrOffset.collectAsStateWithLifecycle()
+    val sunriseOffset by viewModel.sunriseOffset.collectAsStateWithLifecycle()
+    val dhuhrOffset by viewModel.dhuhrOffset.collectAsStateWithLifecycle()
+    val asrOffset by viewModel.asrOffset.collectAsStateWithLifecycle()
+    val maghribOffset by viewModel.maghribOffset.collectAsStateWithLifecycle()
+    val ishaOffset by viewModel.ishaOffset.collectAsStateWithLifecycle()
+
     var showCityPresets by remember { mutableStateOf(false) }
     var selectedPresetTab by remember { mutableStateOf(0) } // 0 = Egypt, 1 = Global
+    var expandedOffsets by remember { mutableStateOf(false) }
 
     val isAr = appLanguage == "Arabic" || appLanguage == "العربية"
 
@@ -383,6 +392,146 @@ fun PrayerScreen(
                              }
 
                              Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+
+                            // 4.5. Manual Time Offsets
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)),
+                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                            ) {
+                                Column {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { expandedOffsets = !expandedOffsets }
+                                            .padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                            Icon(Icons.Default.Tune, contentDescription = "Offsets", tint = MaterialTheme.colorScheme.primary)
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = if (isAr) "تعديل أوقات الصلاة بالدقائق" else "Manual Time Adjustments",
+                                                    fontWeight = FontWeight.Medium,
+                                                    fontSize = 14.sp
+                                                )
+                                                Text(
+                                                    text = if (isAr) "اضبط بالدقائق في حال وجود اختلاف مع المسجد المحلي" else "Adjust individual prayer times in minutes",
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                        Icon(
+                                            imageVector = if (expandedOffsets) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+
+                                    if (expandedOffsets) {
+                                        Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+                                        Column(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            val prayerList = listOf(
+                                                Triple("Fajr", if (isAr) "الفجر" else "Fajr", fajrOffset),
+                                                Triple("Sunrise", if (isAr) "الشروق" else "Sunrise", sunriseOffset),
+                                                Triple("Dhuhr", if (isAr) "الظهر" else "Dhuhr", dhuhrOffset),
+                                                Triple("Asr", if (isAr) "العصر" else "Asr", asrOffset),
+                                                Triple("Maghrib", if (isAr) "المغرب" else "Maghrib", maghribOffset),
+                                                Triple("Isha", if (isAr) "العشاء" else "Isha", ishaOffset)
+                                            )
+
+                                            prayerList.forEach { (key, label, currentOffset) ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = label,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.width(80.dp)
+                                                    )
+
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        // Minus button
+                                                        IconButton(
+                                                            onClick = { viewModel.setPrayerOffset(key, currentOffset - 1) },
+                                                            modifier = Modifier.size(36.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.RemoveCircleOutline,
+                                                                contentDescription = "Decrease",
+                                                                tint = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
+
+                                                        // Offset text badge
+                                                        Card(
+                                                            colors = CardDefaults.cardColors(
+                                                                containerColor = if (currentOffset != 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                                                            ),
+                                                            shape = RoundedCornerShape(8.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = if (isAr) {
+                                                                    if (currentOffset >= 0) "+$currentOffset د" else "$currentOffset د"
+                                                                } else {
+                                                                    if (currentOffset >= 0) "+${currentOffset}m" else "${currentOffset}m"
+                                                                },
+                                                                fontSize = 12.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = if (currentOffset != 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                            )
+                                                        }
+
+                                                        // Plus button
+                                                        IconButton(
+                                                            onClick = { viewModel.setPrayerOffset(key, currentOffset + 1) },
+                                                            modifier = Modifier.size(36.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.AddCircleOutline,
+                                                                contentDescription = "Increase",
+                                                                tint = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Reset All button
+                                            TextButton(
+                                                onClick = {
+                                                    viewModel.setPrayerOffset("Fajr", 0)
+                                                    viewModel.setPrayerOffset("Sunrise", 0)
+                                                    viewModel.setPrayerOffset("Dhuhr", 0)
+                                                    viewModel.setPrayerOffset("Asr", 0)
+                                                    viewModel.setPrayerOffset("Maghrib", 0)
+                                                    viewModel.setPrayerOffset("Isha", 0)
+                                                },
+                                                modifier = Modifier.align(Alignment.End)
+                                            ) {
+                                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(if (isAr) "إعادة ضبط الجميع" else "Reset All Offsets", fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
 
                             // 5. Battery Optimization Exempt for Background Work
                              Row(

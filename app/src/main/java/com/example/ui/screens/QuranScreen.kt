@@ -5,8 +5,12 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import android.speech.tts.TextToSpeech
+import java.util.Locale
+import androidx.compose.ui.window.Dialog
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -307,6 +311,106 @@ fun SurahReaderView(
     val isLoadingRealSurah by viewModel.isLoadingRealSurah.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    
+    // Offline Daily Zikr feature
+    val dayOfYear = remember { java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR) }
+    val dailyZikr = remember(dayOfYear) {
+        val allAzkar = QuranDataset.allAzkar
+        if (allAzkar.isNotEmpty()) {
+            val seed = dayOfYear.toLong()
+            val random = java.util.Random(seed)
+            allAzkar[random.nextInt(allAzkar.size)]
+        } else null
+    }
+
+    // Persist background selection offline in SharedPreferences
+    val sharedPrefs = remember(context) { context.getSharedPreferences("quran_prefs", Context.MODE_PRIVATE) }
+    var selectedBackgroundIndex by remember {
+        mutableStateOf(sharedPrefs.getInt("zikr_bg_index", 0))
+    }
+    var showZikrDialog by remember { mutableStateOf(false) }
+
+    // Text To Speech
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var isTtsReady by remember { mutableStateOf(false) }
+
+    DisposableEffect(context) {
+        val instance = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                isTtsReady = true
+            }
+        }
+        tts = instance
+        onDispose {
+            instance.stop()
+            instance.shutdown()
+        }
+    }
+
+    val speakZikr = { text: String ->
+        tts?.let { engine ->
+            engine.stop()
+            engine.language = Locale("ar")
+            engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "ZikrSpeech")
+        }
+    }
+
+    LaunchedEffect(showZikrDialog) {
+        if (showZikrDialog && dailyZikr != null) {
+            speakZikr(dailyZikr.textArabic)
+        }
+    }
+
+    val zikrBackgrounds = remember {
+        listOf(
+            // Blue
+            Triple(
+                "Royal Blue",
+                if (appLanguage == "Arabic" || appLanguage == "العربية") "أزرق ملكي" else "Royal Blue",
+                Brush.radialGradient(
+                    colors = listOf(Color(0xFF0D253F), Color(0xFF040A15)),
+                    radius = 1000f
+                )
+            ),
+            // Emerald
+            Triple(
+                "Emerald",
+                if (appLanguage == "Arabic" || appLanguage == "العربية") "مسجد الزمرد" else "Emerald Masjid",
+                Brush.radialGradient(
+                    colors = listOf(Color(0xFF0F3A20), Color(0xFF03140A)),
+                    radius = 1000f
+                )
+            ),
+            // Sunset Gold
+            Triple(
+                "Sunset Gold",
+                if (appLanguage == "Arabic" || appLanguage == "العربية") "غروب الذهب" else "Sunset Gold",
+                Brush.radialGradient(
+                    colors = listOf(Color(0xFF4A2F0F), Color(0xFF1B0F05)),
+                    radius = 1000f
+                )
+            ),
+            // Charcoal
+            Triple(
+                "Charcoal",
+                if (appLanguage == "Arabic" || appLanguage == "العربية") "السبج المظلم" else "Spiritual Charcoal",
+                Brush.radialGradient(
+                    colors = listOf(Color(0xFF232526), Color(0xFF0F2027)),
+                    radius = 1000f
+                )
+            ),
+            // Aura Rose
+            Triple(
+                "Aura Rose",
+                if (appLanguage == "Arabic" || appLanguage == "العربية") "أثير الوردي" else "Aura Purple",
+                Brush.radialGradient(
+                    colors = listOf(Color(0xFF3A1C3C), Color(0xFF16081A)),
+                    radius = 1000f
+                )
+            )
+        )
+    }
+
     var showReciterDialog by remember { mutableStateOf(false) }
 
     if (showReciterDialog) {
@@ -375,6 +479,201 @@ fun SurahReaderView(
                 }
             }
         )
+    }
+
+    if (showZikrDialog && dailyZikr != null) {
+        val currentBg = zikrBackgrounds.getOrElse(selectedBackgroundIndex) { zikrBackgrounds[0] }
+        Dialog(
+            onDismissRequest = {
+                showZikrDialog = false
+                tts?.stop()
+            }
+        ) {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Title
+                    Text(
+                        text = if (appLanguage == "Arabic" || appLanguage == "العربية") "ذكر اليوم" else "Daily Remembrance",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    // 1:1 Aspect Ratio Beautiful Image-like Zikr Card
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1.1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(currentBg.third)
+                            .border(BorderStroke(2.dp, Color(0xFFD4AF37)), RoundedCornerShape(16.dp))
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.SpaceBetween,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // Top Ornament
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = Color(0xFFD4AF37).copy(alpha = 0.8f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "نور القرآن • NOOR AL-QURAN",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFD4AF37).copy(alpha = 0.9f)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = Color(0xFFD4AF37).copy(alpha = 0.8f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+
+                            // Arabic text of the Zikr (Main focus)
+                            Text(
+                                text = dailyZikr.textArabic,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                color = Color.White,
+                                lineHeight = 28.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 12.dp)
+                            )
+
+                            // Translation / details
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = dailyZikr.textTranslation,
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.75f),
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 15.sp,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                if (dailyZikr.repeatCount > 1) {
+                                    val repeatText = if (appLanguage == "Arabic" || appLanguage == "العربية") "التكرار: ${dailyZikr.repeatCount} مرات" else "Repeat: ${dailyZikr.repeatCount} times"
+                                    Text(
+                                        text = repeatText,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFD4AF37)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Change Background Controller
+                    Text(
+                        text = if (appLanguage == "Arabic" || appLanguage == "العربية") "تغيير الخلفية" else "Change Background",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.Start)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Horizontal Background Color Choices
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            zikrBackgrounds.forEachIndexed { index, bg ->
+                                val isSelected = selectedBackgroundIndex == index
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(bg.third)
+                                        .border(
+                                            BorderStroke(
+                                                width = if (isSelected) 2.dp else 1.dp,
+                                                color = if (isSelected) Color(0xFFD4AF37) else Color.White.copy(alpha = 0.4f)
+                                            ),
+                                            CircleShape
+                                        )
+                                        .clickable {
+                                            selectedBackgroundIndex = index
+                                            sharedPrefs.edit().putInt("zikr_bg_index", index).apply()
+                                        }
+                                )
+                            }
+                        }
+
+                        // Play/TTS button
+                        IconButton(
+                            onClick = { speakZikr(dailyZikr.textArabic) },
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape)
+                                .size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = "Play Zikr Sound",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Buttons (Close)
+                    Button(
+                        onClick = {
+                            showZikrDialog = false
+                            tts?.stop()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (appLanguage == "Arabic" || appLanguage == "العربية") "إغلاق" else "Close",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
     }
 
     if (selectedSurah != null) {
@@ -612,10 +911,28 @@ fun SurahReaderView(
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Book, contentDescription = "Tafsir", tint = Color(0xFFD4AF37), modifier = Modifier.size(14.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(Localization.translate("tafsir_title", appLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Book, contentDescription = "Tafsir", tint = Color(0xFFD4AF37), modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(Localization.translate("tafsir_title", appLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                            
+                                            IconButton(
+                                                onClick = { showZikrDialog = true },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.VolumeUp,
+                                                    contentDescription = "Play Daily Zikr",
+                                                    tint = Color(0xFFD4AF37),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
                                         }
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(ayah.tafsir, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

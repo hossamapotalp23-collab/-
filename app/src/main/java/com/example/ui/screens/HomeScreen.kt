@@ -513,6 +513,7 @@ fun HomeScreen(
                     FeatureItem("quiz", "Quiz", Icons.Default.School, "Quiz"),
                     FeatureItem("duas", "Duas", Icons.Default.Favorite, "Duas"),
                     FeatureItem("tasbeeh", "Tasbeeh", Icons.Default.Lens, "Tasbeeh"),
+                    FeatureItem("zakat", "Zakat Calculator", Icons.Default.Calculate, "Zakat"),
                     FeatureItem("downloads", "Downloads", Icons.Default.Download, "Downloads"),
                     FeatureItem("settings", "Settings", Icons.Default.Settings, "Settings")
                 )

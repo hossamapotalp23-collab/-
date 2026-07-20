@@ -7,6 +7,13 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.util.Log
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
+import com.example.ui.theme.Localization
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.api.GeminiService
@@ -148,6 +155,24 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     private val _isDSTEnabled = MutableStateFlow(prefs.getBoolean("is_dst_enabled", false))
     val isDSTEnabled = _isDSTEnabled.asStateFlow()
 
+    private val _fajrOffset = MutableStateFlow(prefs.getInt("fajr_offset", 0))
+    val fajrOffset = _fajrOffset.asStateFlow()
+
+    private val _sunriseOffset = MutableStateFlow(prefs.getInt("sunrise_offset", 0))
+    val sunriseOffset = _sunriseOffset.asStateFlow()
+
+    private val _dhuhrOffset = MutableStateFlow(prefs.getInt("dhuhr_offset", 0))
+    val dhuhrOffset = _dhuhrOffset.asStateFlow()
+
+    private val _asrOffset = MutableStateFlow(prefs.getInt("asr_offset", 0))
+    val asrOffset = _asrOffset.asStateFlow()
+
+    private val _maghribOffset = MutableStateFlow(prefs.getInt("maghrib_offset", 0))
+    val maghribOffset = _maghribOffset.asStateFlow()
+
+    private val _ishaOffset = MutableStateFlow(prefs.getInt("isha_offset", 0))
+    val ishaOffset = _ishaOffset.asStateFlow()
+
     private val _isPrayerApproachingAlertEnabled = MutableStateFlow(prefs.getBoolean("is_prayer_approaching_alert_enabled", true))
     val isPrayerApproachingAlertEnabled = _isPrayerApproachingAlertEnabled.asStateFlow()
 
@@ -156,6 +181,31 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
 
     private val _isTasbeehVibrationEnabled = MutableStateFlow(prefs.getBoolean("is_tasbeeh_vibration_enabled", true))
     val isTasbeehVibrationEnabled = _isTasbeehVibrationEnabled.asStateFlow()
+
+    // --- New Expanded Settings (Hijri, Audio, Habits) ---
+    private val _hijriOffset = MutableStateFlow(prefs.getInt("hijri_offset", 0))
+    val hijriOffset = _hijriOffset.asStateFlow()
+
+    private val _audioQualityHigh = MutableStateFlow(prefs.getBoolean("audio_quality_high", true))
+    val audioQualityHigh = _audioQualityHigh.asStateFlow()
+
+    private val _autoPlayNextAyah = MutableStateFlow(prefs.getBoolean("auto_play_next_ayah", true))
+    val autoPlayNextAyah = _autoPlayNextAyah.asStateFlow()
+
+    private val _isMorningEveningAzkarReminderEnabled = MutableStateFlow(prefs.getBoolean("is_morning_evening_azkar_reminder_enabled", true))
+    val isMorningEveningAzkarReminderEnabled = _isMorningEveningAzkarReminderEnabled.asStateFlow()
+
+    private val _isFridayKahfReminderEnabled = MutableStateFlow(prefs.getBoolean("is_friday_kahf_reminder_enabled", true))
+    val isFridayKahfReminderEnabled = _isFridayKahfReminderEnabled.asStateFlow()
+
+    private val _isTahajjudReminderEnabled = MutableStateFlow(prefs.getBoolean("is_tahajjud_reminder_enabled", false))
+    val isTahajjudReminderEnabled = _isTahajjudReminderEnabled.asStateFlow()
+
+    private val _isDailyQuranReminderEnabled = MutableStateFlow(prefs.getBoolean("is_daily_quran_reminder_enabled", true))
+    val isDailyQuranReminderEnabled = _isDailyQuranReminderEnabled.asStateFlow()
+
+    private val _dailyQuranGoalPages = MutableStateFlow(prefs.getInt("daily_quran_goal_pages", 5))
+    val dailyQuranGoalPages = _dailyQuranGoalPages.asStateFlow()
 
     // --- Audio Downloading States ---
     sealed class DownloadState {
@@ -220,6 +270,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     private val _compassAzimuth = MutableStateFlow(0f)
     val compassAzimuth = _compassAzimuth.asStateFlow()
 
+    private val _sensorAccuracy = MutableStateFlow(3) // SENSOR_STATUS_ACCURACY_HIGH is 3
+    val sensorAccuracy = _sensorAccuracy.asStateFlow()
+
     private val _qiblaBearing = MutableStateFlow(0.0)
     val qiblaBearing = _qiblaBearing.asStateFlow()
 
@@ -277,6 +330,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     )
 
     init {
+        updateHijriDate()
         // Load persistent Google Sign-In state on launch
         val savedGoogleId = prefs.getString("user_google_id", null)
         if (savedGoogleId != null) {
@@ -318,12 +372,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         }
 
         // Initialize Sensor Manager for Qibla Compass
-        val baseSensorContext = application.applicationContext
-        val sensorContext = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            baseSensorContext.createAttributionContext("qibla")
-        } else {
-            baseSensorContext
-        }
+        val sensorContext = application.applicationContext
         sensorManager = sensorContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         if (sensorManager != null) {
             rotationSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
@@ -403,6 +452,37 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
                 }
             }
         }
+
+        registerPlaybackReceiver()
+
+        // Observe playback states to update notifications automatically
+        viewModelScope.launch {
+            combine(
+                _isPlayingAudio,
+                _isPlayingRadio,
+                _isPlayingAdhan,
+                _selectedSurah,
+                _selectedReciter,
+                _currentPlayingRadioUrl,
+                _appLanguage
+            ) { flows ->
+                val isPlayingAudio = flows[0] as Boolean
+                val isPlayingRadio = flows[1] as Boolean
+                val isPlayingAdhan = flows[2] as Boolean
+                val selectedSurah = flows[3] as Surah?
+                val selectedReciter = flows[4] as Reciter
+                val currentPlayingRadioUrl = flows[5] as String?
+
+                updatePlaybackNotification(
+                    isPlayingAudio = isPlayingAudio,
+                    isPlayingRadio = isPlayingRadio,
+                    isPlayingAdhan = isPlayingAdhan,
+                    selectedSurah = selectedSurah,
+                    selectedReciter = selectedReciter,
+                    currentPlayingRadioUrl = currentPlayingRadioUrl
+                )
+            }.collect()
+        }
     }
 
     // --- Compass Sensors ---
@@ -448,12 +528,22 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Not used
+        if (sensor?.type == Sensor.TYPE_ROTATION_VECTOR || sensor?.type == Sensor.TYPE_MAGNETIC_FIELD) {
+            _sensorAccuracy.value = accuracy
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
         unregisterCompassSensors()
+        unregisterPlaybackReceiver()
+        try {
+            val notificationManager = getApplication<Application>().applicationContext
+                .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.cancel(4444)
+        } catch (e: Exception) {
+            // ignore
+        }
         try {
             mediaPlayer?.release()
             mediaPlayer = null
@@ -598,12 +688,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         currentLoadedUrl = url
         viewModelScope.launch(Dispatchers.Main) {
             try {
-                val baseContext = getApplication<Application>().applicationContext
-                val context = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    baseContext.createAttributionContext("audio_playback")
-                } else {
-                    baseContext
-                }
+                val context = getApplication<Application>().applicationContext
 
                 if (mediaPlayer == null) {
                     mediaPlayer = android.media.MediaPlayer().apply {
@@ -719,12 +804,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     }
 
     fun detectLocation(onResult: (Boolean, String) -> Unit) {
-        val baseContext = getApplication<Application>().applicationContext
-        val context = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            baseContext.createAttributionContext("prayer_times")
-        } else {
-            baseContext
-        }
+        val context = getApplication<Application>().applicationContext
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
         if (locationManager == null) {
             onResult(false, "Location Manager not available")
@@ -851,15 +931,44 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         return timeStr
     }
 
+    private fun addMinutesToTime(timeStr: String, minutesOffset: Int): String {
+        if (minutesOffset == 0) return timeStr
+        try {
+            val parts = timeStr.split(":")
+            if (parts.size == 2) {
+                val totalMinutes = parts[0].toInt() * 60 + parts[1].toInt() + minutesOffset
+                val normalizedMinutes = (totalMinutes + 1440) % 1440
+                val hours = normalizedMinutes / 60
+                val mins = normalizedMinutes % 60
+                return String.format("%02d:%02d", hours, mins)
+            }
+        } catch (e: Exception) {
+            Log.e("QuranViewModel", "Error adjusting minutes offset: ${e.message}")
+        }
+        return timeStr
+    }
+
     private fun adjustTimesForDST(times: PrayerCalculator.PrayerTimes): PrayerCalculator.PrayerTimes {
-        if (!_isDSTEnabled.value) return times
+        val baseTimes = if (_isDSTEnabled.value) {
+            PrayerCalculator.PrayerTimes(
+                fajr = addOneHourToTime(times.fajr),
+                sunrise = addOneHourToTime(times.sunrise),
+                dhuhr = addOneHourToTime(times.dhuhr),
+                asr = addOneHourToTime(times.asr),
+                maghrib = addOneHourToTime(times.maghrib),
+                isha = addOneHourToTime(times.isha)
+            )
+        } else {
+            times
+        }
+
         return PrayerCalculator.PrayerTimes(
-            fajr = addOneHourToTime(times.fajr),
-            sunrise = addOneHourToTime(times.sunrise),
-            dhuhr = addOneHourToTime(times.dhuhr),
-            asr = addOneHourToTime(times.asr),
-            maghrib = addOneHourToTime(times.maghrib),
-            isha = addOneHourToTime(times.isha)
+            fajr = addMinutesToTime(baseTimes.fajr, _fajrOffset.value),
+            sunrise = addMinutesToTime(baseTimes.sunrise, _sunriseOffset.value),
+            dhuhr = addMinutesToTime(baseTimes.dhuhr, _dhuhrOffset.value),
+            asr = addMinutesToTime(baseTimes.asr, _asrOffset.value),
+            maghrib = addMinutesToTime(baseTimes.maghrib, _maghribOffset.value),
+            isha = addMinutesToTime(baseTimes.isha, _ishaOffset.value)
         )
     }
 
@@ -896,7 +1005,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
             _isUsingLiveApi.value = false
             val localTimes = PrayerCalculator.calculatePrayerTimes(lat, lng, cal, method)
             setAdjustedPrayerTimes(localTimes)
-            _hijriDateString.value = PrayerCalculator.getHijriDate()
+            updateHijriDate()
 
             if (!isFetchingLiveTimes) {
                 isFetchingLiveTimes = true
@@ -1225,6 +1334,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
     fun setLanguage(lang: String) {
         _appLanguage.value = lang
         prefs.edit().putString("app_language", lang).apply()
+        updateHijriDate()
     }
 
     fun setAppTheme(theme: String) {
@@ -1329,6 +1439,36 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         recalculatePrayerTimes(Calendar.getInstance())
     }
 
+    fun setPrayerOffset(prayer: String, offset: Int) {
+        when (prayer.lowercase()) {
+            "fajr" -> {
+                _fajrOffset.value = offset
+                prefs.edit().putInt("fajr_offset", offset).apply()
+            }
+            "sunrise" -> {
+                _sunriseOffset.value = offset
+                prefs.edit().putInt("sunrise_offset", offset).apply()
+            }
+            "dhuhr" -> {
+                _dhuhrOffset.value = offset
+                prefs.edit().putInt("dhuhr_offset", offset).apply()
+            }
+            "asr" -> {
+                _asrOffset.value = offset
+                prefs.edit().putInt("asr_offset", offset).apply()
+            }
+            "maghrib" -> {
+                _maghribOffset.value = offset
+                prefs.edit().putInt("maghrib_offset", offset).apply()
+            }
+            "isha" -> {
+                _ishaOffset.value = offset
+                prefs.edit().putInt("isha_offset", offset).apply()
+            }
+        }
+        recalculatePrayerTimes(Calendar.getInstance())
+    }
+
     fun togglePrayerApproachingAlert() {
         val newVal = !_isPrayerApproachingAlertEnabled.value
         _isPrayerApproachingAlertEnabled.value = newVal
@@ -1345,6 +1485,88 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
         val newVal = !_isTasbeehVibrationEnabled.value
         _isTasbeehVibrationEnabled.value = newVal
         prefs.edit().putBoolean("is_tasbeeh_vibration_enabled", newVal).apply()
+    }
+
+    fun setHijriOffset(offset: Int) {
+        _hijriOffset.value = offset
+        prefs.edit().putInt("hijri_offset", offset).apply()
+        updateHijriDate()
+    }
+
+    fun updateHijriDate() {
+        val isAr = _appLanguage.value == "Arabic" || _appLanguage.value == "العربية"
+        _hijriDateString.value = PrayerCalculator.getHijriDate(_hijriOffset.value, isAr)
+    }
+
+    fun toggleAudioQuality() {
+        val newVal = !_audioQualityHigh.value
+        _audioQualityHigh.value = newVal
+        prefs.edit().putBoolean("audio_quality_high", newVal).apply()
+    }
+
+    fun toggleAutoPlayNextAyah() {
+        val newVal = !_autoPlayNextAyah.value
+        _autoPlayNextAyah.value = newVal
+        prefs.edit().putBoolean("auto_play_next_ayah", newVal).apply()
+    }
+
+    fun toggleMorningEveningAzkarReminder() {
+        val newVal = !_isMorningEveningAzkarReminderEnabled.value
+        _isMorningEveningAzkarReminderEnabled.value = newVal
+        prefs.edit().putBoolean("is_morning_evening_azkar_reminder_enabled", newVal).apply()
+    }
+
+    fun toggleFridayKahfReminder() {
+        val newVal = !_isFridayKahfReminderEnabled.value
+        _isFridayKahfReminderEnabled.value = newVal
+        prefs.edit().putBoolean("is_friday_kahf_reminder_enabled", newVal).apply()
+    }
+
+    fun toggleTahajjudReminder() {
+        val newVal = !_isTahajjudReminderEnabled.value
+        _isTahajjudReminderEnabled.value = newVal
+        prefs.edit().putBoolean("is_tahajjud_reminder_enabled", newVal).apply()
+    }
+
+    fun toggleDailyQuranReminder() {
+        val newVal = !_isDailyQuranReminderEnabled.value
+        _isDailyQuranReminderEnabled.value = newVal
+        prefs.edit().putBoolean("is_daily_quran_reminder_enabled", newVal).apply()
+    }
+
+    fun setDailyQuranGoalPages(pages: Int) {
+        _dailyQuranGoalPages.value = pages
+        prefs.edit().putInt("daily_quran_goal_pages", pages).apply()
+    }
+
+    fun clearHistoryAndCache(context: Context, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val audioDir = File(context.filesDir, "audio_downloads")
+                if (audioDir.exists()) {
+                    audioDir.deleteRecursively()
+                }
+                prefs.edit().apply {
+                    remove("user_google_id")
+                    remove("user_email")
+                    remove("user_display_name")
+                    remove("user_photo_url")
+                    remove("hijri_offset")
+                    apply()
+                }
+                _tasbeehCount.value = 0
+                _currentUser.value = null
+                _hijriOffset.value = 0
+                viewModelScope.launch(Dispatchers.Main) {
+                    updateHijriDate()
+                    onResult(true)
+                }
+            } catch (e: Exception) {
+                viewModelScope.launch(Dispatchers.Main) {
+                    onResult(false)
+                }
+            }
+        }
     }
 
     // --- Audio Downloading Engine ---
@@ -1641,6 +1863,155 @@ class QuranViewModel(application: Application) : AndroidViewModel(application), 
             .setAutoCancel(true)
 
         notificationManager.notify(System.currentTimeMillis().toInt() + 1000, builder.build())
+    }
+
+    private var isReceiverRegistered = false
+    private val playbackReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: android.content.Intent?) {
+            when (intent?.action) {
+                "com.example.ACTION_PAUSE_AUDIO", "com.example.ACTION_STOP_AUDIO" -> {
+                    if (_isPlayingAudio.value) {
+                        toggleAudioPlayback()
+                    }
+                }
+                "com.example.ACTION_STOP_RADIO" -> {
+                    stopRadio()
+                }
+                "com.example.ACTION_STOP_ADHAN" -> {
+                    stopAdhan()
+                }
+            }
+        }
+    }
+
+    private fun registerPlaybackReceiver() {
+        if (isReceiverRegistered) return
+        val context = getApplication<Application>().applicationContext
+        try {
+            val filter = android.content.IntentFilter().apply {
+                addAction("com.example.ACTION_PAUSE_AUDIO")
+                addAction("com.example.ACTION_STOP_AUDIO")
+                addAction("com.example.ACTION_STOP_RADIO")
+                addAction("com.example.ACTION_STOP_ADHAN")
+            }
+            androidx.core.content.ContextCompat.registerReceiver(
+                context,
+                playbackReceiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            isReceiverRegistered = true
+        } catch (e: Exception) {
+            Log.e("QuranViewModel", "Error registering playback receiver: ${e.message}")
+        }
+    }
+
+    private fun unregisterPlaybackReceiver() {
+        if (!isReceiverRegistered) return
+        val context = getApplication<Application>().applicationContext
+        try {
+            context.unregisterReceiver(playbackReceiver)
+            isReceiverRegistered = false
+        } catch (e: Exception) {
+            Log.e("QuranViewModel", "Error unregistering playback receiver: ${e.message}")
+        }
+    }
+
+    private fun updatePlaybackNotification(
+        isPlayingAudio: Boolean,
+        isPlayingRadio: Boolean,
+        isPlayingAdhan: Boolean,
+        selectedSurah: Surah?,
+        selectedReciter: Reciter,
+        currentPlayingRadioUrl: String?
+    ) {
+        val context = getApplication<Application>().applicationContext
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channelId = "noor_playback_channel"
+        
+        // 1. If nothing is playing, cancel the notification and return
+        if (!isPlayingAudio && !isPlayingRadio && !isPlayingAdhan) {
+            notificationManager.cancel(4444)
+            return
+        }
+
+        // 2. Create the notification channel if on Android 8.0+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val name = if (_appLanguage.value == "Arabic" || _appLanguage.value == "العربية") "البث الصوتي والتحكم" else "Audio Playback Controls"
+            val importance = NotificationManager.IMPORTANCE_LOW // Use LOW importance so it doesn't make annoying alert sounds every state change!
+            val channel = NotificationChannel(channelId, name, importance).apply {
+                description = "Shows playback status and controls for Quran, Radio, and Adhan"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        // 3. Determine text and title
+        val isAr = _appLanguage.value == "Arabic" || _appLanguage.value == "العربية"
+        var titleText = ""
+        var statusText = ""
+        var stopActionIntentName = ""
+
+        if (isPlayingAdhan) {
+            titleText = if (isAr) "صوت الأذان يعمل الآن" else "Adhan Recitation Playing"
+            statusText = if (isAr) "تنبيه الأذان بصوت المؤذن المختار" else "Adhan alert reciting by chosen Muezzin"
+            stopActionIntentName = "com.example.ACTION_STOP_ADHAN"
+        } else if (isPlayingRadio) {
+            val stationName = when {
+                currentPlayingRadioUrl?.contains("cairo") == true -> if (isAr) "إذاعة القرآن الكريم من القاهرة" else "Quran Radio Cairo"
+                currentPlayingRadioUrl?.contains("saudi") == true -> if (isAr) "إذاعة القرآن الكريم من السعودية" else "Quran Radio Saudi"
+                currentPlayingRadioUrl?.contains("alafasy") == true -> if (isAr) "قناة الشيخ مشاري العفاسي" else "Mishary Alafasy Live"
+                currentPlayingRadioUrl?.contains("basit") == true -> if (isAr) "الشيخ عبد الباسط عبد الصمد" else "Abdul Basit Live"
+                currentPlayingRadioUrl?.contains("minshawi") == true -> if (isAr) "الشيخ محمد صديق المنشاوي" else "El-Minshawi Live"
+                currentPlayingRadioUrl?.contains("yasser") == true -> if (isAr) "الشيخ ياسر الدوسري" else "Yasser Al-Dosari Live"
+                currentPlayingRadioUrl?.contains("maher") == true -> if (isAr) "الشيخ ماهر المعيقلي" else "Maher Al-Muaiqly Live"
+                currentPlayingRadioUrl?.contains("ajmy") == true -> if (isAr) "الشيخ أحمد العجمي" else "Ahmad Al-Ajmy Live"
+                currentPlayingRadioUrl?.contains("ghamdi") == true -> if (isAr) "الشيخ سعد الغامدي" else "Saad Al-Ghamdi Live"
+                currentPlayingRadioUrl?.contains("shuraim") == true -> if (isAr) "الشيخ سعود الشريم" else "Saud Al-Shuraim Live"
+                currentPlayingRadioUrl?.contains("sudais") == true -> if (isAr) "الشيخ عبد الرحمن السديس" else "Al-Sudais Live"
+                else -> if (isAr) "إذاعة القرآن الكريم مباشرة" else "Live Quran Radio"
+            }
+            titleText = stationName
+            statusText = if (isAr) "البث المباشر يعمل حالياً" else "Live streaming in progress"
+            stopActionIntentName = "com.example.ACTION_STOP_RADIO"
+        } else if (isPlayingAudio) {
+            val surahName = if (isAr) (selectedSurah?.header?.arabicName ?: "القرآن") else (selectedSurah?.header?.name ?: "Quran Surah")
+            val reciterName = Localization.translate("reciter_${selectedReciter.id}", _appLanguage.value)
+            titleText = if (isAr) "تلاوة سورة $surahName" else "Reciting Surah $surahName"
+            statusText = if (isAr) "بصوت الشيخ $reciterName" else "Recited by Sheikh $reciterName"
+            stopActionIntentName = "com.example.ACTION_STOP_AUDIO"
+        }
+
+        // 4. Create action PendingIntents
+        val flag = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+
+        val stopIntent = Intent(stopActionIntentName)
+        val stopPendingIntent = PendingIntent.getBroadcast(context, 101, stopIntent, flag)
+
+        val mainIntent = Intent(context, com.example.MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val mainPendingIntent = PendingIntent.getActivity(context, 102, mainIntent, flag)
+
+        // 5. Build the Notification
+        val builder = androidx.core.app.NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(titleText)
+            .setContentText(statusText)
+            .setOngoing(true)
+            .setContentIntent(mainPendingIntent)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+            .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+            .addAction(
+                android.R.drawable.ic_media_ff,
+                if (isAr) "إيقاف التشغيل" else "Stop / Pause",
+                stopPendingIntent
+            )
+
+        notificationManager.notify(4444, builder.build())
     }
 }
 
